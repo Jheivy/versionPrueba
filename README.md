@@ -54,5 +54,5 @@ La escala de Object Capture es aproximada: indica en la app la **dimensión más
 
 ## Tests
 ```bash
-cd server && .venv/bin/pytest
+cd server && .venv/bin/pytest && .venv/bin/ruff check ..
 ```

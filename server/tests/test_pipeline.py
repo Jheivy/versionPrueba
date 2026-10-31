@@ -17,14 +17,16 @@ SHEET = render_sheet()
 def test_extract_rect_with_hole():
     img = photo(SHEET, [("rect", 0, (60, 100, 40, 20)), ("circle", 255, (70, 110, 4))])
     polys = extract(rectify(img, 10.0), 10.0)
-    xs = [p[0] for p in polys[0]]; ys = [p[1] for p in polys[0]]
+    xs = [p[0] for p in polys[0]]
+    ys = [p[1] for p in polys[0]]
     assert max(xs) == pytest.approx(40, abs=0.6) and max(ys) == pytest.approx(20, abs=0.6)
     assert len(polys) == 2  # exterior + agujero
 
 
 def test_full_job_makes_stl(tmp_path):
     # pieza en L: planta 40x20, alzado en L (40x30), perfil 20x30
-    inp = tmp_path / "input"; inp.mkdir()
+    inp = tmp_path / "input"
+    inp.mkdir()
     shots = {
         "planta": [("rect", 0, (60, 100, 40, 20))],
         "alzado": [("poly", 0, [(60, 130), (100, 130), (100, 120), (70, 120), (70, 100), (60, 100)])],

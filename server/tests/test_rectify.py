@@ -25,7 +25,8 @@ def test_rectify_recovers_scale():
     out = rectify(photo(render_sheet()), PX)
     assert out.shape == (round(A4_H * PX), round(A4_W * PX))
     mask = out < 60
-    mask[:int(60 * PX)] = False; mask[-int(60 * PX):] = False  # ignora marcadores
+    mask[:int(60 * PX)] = False  # ignora marcadores
+    mask[-int(60 * PX):] = False
     ys, xs = np.nonzero(mask)
     w, h = (xs.max() - xs.min() + 1) / PX, (ys.max() - ys.min() + 1) / PX
     assert w == pytest.approx(50, abs=0.5) and h == pytest.approx(50, abs=0.5)

@@ -11,6 +11,7 @@ from pathlib import Path
 
 import cv2
 
+from . import jobs
 from .views.contours import NoShapeFound, extract
 from .views.rectify import MarkersNotFound, rectify
 from .views.scad_writer import build_scad
@@ -22,9 +23,7 @@ PARAM_KEYS = ("ancho", "fondo", "alto", "holgura")  # cotas objetivo (mm) y holg
 
 
 def _set(d: Path, **kw):
-    job = json.loads((d / "job.json").read_text())
-    job.update(kw)
-    (d / "job.json").write_text(json.dumps(job, indent=2))
+    jobs.update(d, **kw)
 
 
 def _export(d: Path, job_id: str) -> dict:
@@ -83,64 +82,65 @@ def _dims(views, altura=None):
 def process_views(d: Path, params: dict | None = None, pause_for_review: bool = False) -> None:
     """Procesa las fotos de `input/`. `params` admite ancho/fondo/alto (cotas medidas
     con calibre, mm; reescalan la pieza) y holgura (offset de contorno, mm)."""
-    try:
-        params = {k: float(v) for k, v in (params or {}).items() if k in PARAM_KEYS and v not in (None, "")}
-        _set(d, status="processing", error=None, error_view=None)
-        views = {}
-        for p in sorted((d / "input").iterdir()):
-            name = p.name.split("_", 1)[0]
-            if name in ("planta", "alzado", "perfil"):
-                img = cv2.imread(str(p))
-                if img is None:
-                    raise ViewError(name, f"No se pudo leer la foto de {name}. Vuelve a hacerla.")
-                _step(d, "rectifying")
-                try:
-                    sheet = rectify(img, PX)
-                except MarkersNotFound:
-                    raise ViewError(name, f"No vi la hoja de marcadores en la foto de {name}. "
-                                          "Encuádrala entera y con buena luz.")
-                _step(d, "contours")
-                try:
-                    views[name] = extract(sheet, PX)
-                except NoShapeFound:
-                    raise ViewError(name, f"No encontré la pieza en la foto de {name}. "
-                                          "Colócala sobre la hoja con fondo claro.")
-        if "planta" not in views:
-            raise ViewError("planta", "Falta la foto de planta.")
-        if pause_for_review:
-            _set(d, status="review", step="review")
-            return
-        _step(d, "modeling")
+    with jobs.running(d):
+        try:
+            params = {k: float(v) for k, v in (params or {}).items() if k in PARAM_KEYS and v not in (None, "")}
+            _set(d, status="processing", error=None, error_view=None)
+            views = {}
+            for p in sorted((d / "input").iterdir()):
+                name = p.name.split("_", 1)[0]
+                if name in ("planta", "alzado", "perfil"):
+                    img = cv2.imread(str(p))
+                    if img is None:
+                        raise ViewError(name, f"No se pudo leer la foto de {name}. Vuelve a hacerla.")
+                    _step(d, "rectifying")
+                    try:
+                        sheet = rectify(img, PX)
+                    except MarkersNotFound:
+                        raise ViewError(name, f"No vi la hoja de marcadores en la foto de {name}. "
+                                              "Encuádrala entera y con buena luz.")
+                    _step(d, "contours")
+                    try:
+                        views[name] = extract(sheet, PX)
+                    except NoShapeFound:
+                        raise ViewError(name, f"No encontré la pieza en la foto de {name}. "
+                                              "Colócala sobre la hoja con fondo claro.")
+            if "planta" not in views:
+                raise ViewError("planta", "Falta la foto de planta.")
+            if pause_for_review:
+                _set(d, status="review", step="review")
+                return
+            _step(d, "modeling")
 
-        detected = _dims(views)
-        if detected["alto"] is None:  # solo planta: extrusión plana
-            detected["alto"] = params.get("alto", 5.0)
-        k = {a: params[a] / detected[a] if a in params and detected[a] else 1.0 for a in ("ancho", "fondo", "alto")}
-        views["planta"] = _scale(views["planta"], k["ancho"], k["fondo"])
-        if "alzado" in views:
-            views["alzado"] = _scale(views["alzado"], k["ancho"], k["alto"])
-        if "perfil" in views:
-            views["perfil"] = _scale(views["perfil"], k["fondo"], k["alto"])
-        altura = detected["alto"] * k["alto"]
+            detected = _dims(views)
+            if detected["alto"] is None:  # solo planta: extrusión plana
+                detected["alto"] = params.get("alto", 5.0)
+            k = {a: params[a] / detected[a] if a in params and detected[a] else 1.0 for a in ("ancho", "fondo", "alto")}
+            views["planta"] = _scale(views["planta"], k["ancho"], k["fondo"])
+            if "alzado" in views:
+                views["alzado"] = _scale(views["alzado"], k["ancho"], k["alto"])
+            if "perfil" in views:
+                views["perfil"] = _scale(views["perfil"], k["fondo"], k["alto"])
+            altura = detected["alto"] * k["alto"]
 
-        out = d / "output"
-        out.mkdir(exist_ok=True)
-        scad = build_scad(views["planta"], views.get("alzado"), views.get("perfil"),
-                          holgura=params.get("holgura", 0.0), altura=altura)
-        (out / "pieza.scad").write_text(scad)
-        outputs = ["pieza.scad"]
-        (out / "pieza.stl").unlink(missing_ok=True)
-        _step(d, "exporting")
-        if shutil.which("openscad"):
-            subprocess.run(["openscad", "-q", "-o", str(out / "pieza.stl"), str(out / "pieza.scad")],
-                           check=True, capture_output=True, timeout=300)
-            outputs.append("pieza.stl")
-        dims = {a: detected[a] * k[a] for a in k}
-        exported = _export(d, d.name)
-        _set(d, status="done", step=None, outputs=outputs, detected=detected, params=params,
-             dims=dims, exported=exported)
-        _notify({"event": "job.done", "id": d.name, "dims": dims, "files": exported})
-    except ViewError as e:
-        _set(d, status="error", step=None, error=str(e), error_view=e.view)
-    except Exception as e:  # el estado de error se muestra en la app
-        _set(d, status="error", step=None, error=str(e), error_view=None)
+            out = d / "output"
+            out.mkdir(exist_ok=True)
+            scad = build_scad(views["planta"], views.get("alzado"), views.get("perfil"),
+                              holgura=params.get("holgura", 0.0), altura=altura)
+            (out / "pieza.scad").write_text(scad)
+            outputs = ["pieza.scad"]
+            (out / "pieza.stl").unlink(missing_ok=True)
+            _step(d, "exporting")
+            if shutil.which("openscad"):
+                subprocess.run(["openscad", "-q", "-o", str(out / "pieza.stl"), str(out / "pieza.scad")],
+                               check=True, capture_output=True, timeout=300)
+                outputs.append("pieza.stl")
+            dims = {a: detected[a] * k[a] for a in k}
+            exported = _export(d, d.name)
+            _set(d, status="done", step=None, outputs=outputs, detected=detected, params=params,
+                 dims=dims, exported=exported)
+            _notify({"event": "job.done", "id": d.name, "dims": dims, "files": exported})
+        except ViewError as e:
+            _set(d, status="error", step=None, error=str(e), error_view=e.view)
+        except Exception as e:  # el estado de error se muestra en la app
+            _set(d, status="error", step=None, error=str(e), error_view=None)

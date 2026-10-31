@@ -13,19 +13,20 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import Body, BackgroundTasks, FastAPI, File, Form, HTTPException, UploadFile
 import cv2
 import numpy as np
+from fastapi import BackgroundTasks, Body, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
+from . import jobs
 from .pipeline import process_views
 from .pipeline_video import process_video
+from .views.contours import NoShapeFound
 from .views.detect import analyze
 from .views.markers import render_sheet
 from .views.preview import render_preview
 from .views.rectify import MarkersNotFound
-from .views.contours import NoShapeFound
 
 STORAGE = Path(os.environ.get("SCAN2PRINT_STORAGE", Path.home() / "Scan2Print" / "jobs"))
 WEB_DIR = Path(__file__).resolve().parents[2] / "web"
@@ -53,6 +54,7 @@ async def _announce(state: dict) -> None:
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    jobs.recover_stale(STORAGE)
     state: dict = {}
     task = asyncio.create_task(_announce(state))
     yield
@@ -75,7 +77,17 @@ def _job_dir(job_id: str) -> Path:
 
 
 def _read_job(d: Path) -> dict:
-    return json.loads((d / "job.json").read_text())
+    return jobs.read(d)
+
+
+BUSY = "El trabajo se está procesando; espera a que termine."
+
+
+def _enqueue(background: BackgroundTasks, d: Path, fn, *args) -> None:
+    """Encola un procesado; 409 si ese trabajo ya tiene uno en curso o en cola."""
+    if not jobs.reserve(d):
+        raise HTTPException(409, BUSY)
+    background.add_task(fn, d, *args)
 
 
 @app.post("/api/jobs", status_code=201)
@@ -117,11 +129,11 @@ async def create_job(
         "name": name.strip()[:60],
         "step": None,
     }
-    (STORAGE / job_id / "job.json").write_text(json.dumps(job, indent=2))
+    jobs.write(STORAGE / job_id, job)
     if mode == "views":
-        background.add_task(process_views, STORAGE / job_id, None, review == "1")
+        _enqueue(background, STORAGE / job_id, process_views, None, review == "1")
     else:
-        background.add_task(process_video, STORAGE / job_id)
+        _enqueue(background, STORAGE / job_id, process_video)
     return job
 
 
@@ -143,15 +155,12 @@ def set_params(job_id: str, background: BackgroundTasks, params: dict = Body(...
     """views: ancho/fondo/alto/holgura (mm). video: largo (mm) y detalle. Regenera la pieza."""
     d = _job_dir(job_id)
     fn = process_views if _read_job(d)["mode"] == "views" else process_video
-    background.add_task(fn, d, params)
+    _enqueue(background, d, fn, params)
     return {"status": "queued"}
 
 
 def _write_job(d: Path, **kw) -> dict:
-    job = _read_job(d)
-    job.update(kw)
-    (d / "job.json").write_text(json.dumps(job, indent=2))
-    return job
+    return jobs.update(d, **kw)
 
 
 @app.patch("/api/jobs/{job_id}")
@@ -162,7 +171,10 @@ def rename_job(job_id: str, body: dict = Body(...)):
 
 @app.delete("/api/jobs/{job_id}", status_code=204)
 def delete_job(job_id: str):
-    shutil.rmtree(_job_dir(job_id))
+    d = _job_dir(job_id)
+    if jobs.is_busy(d):
+        raise HTTPException(409, BUSY)
+    shutil.rmtree(d)
 
 
 @app.post("/api/jobs/{job_id}/confirm")
@@ -171,8 +183,8 @@ def confirm_job(job_id: str, background: BackgroundTasks):
     d = _job_dir(job_id)
     if _read_job(d)["status"] != "review":
         raise HTTPException(409, "el trabajo no está esperando revisión")
+    _enqueue(background, d, process_views, None, False)
     _write_job(d, status="processing", step="modeling")
-    background.add_task(process_views, d, None, False)
     return {"status": "queued"}
 
 
@@ -183,6 +195,8 @@ async def replace_view(job_id: str, background: BackgroundTasks, view: str = For
     job = _read_job(d)
     if job["mode"] != "views" or view not in VIEW_NAMES:
         raise HTTPException(400, "vista inválida")
+    if not jobs.reserve(d):
+        raise HTTPException(409, BUSY)
     inp = d / "input"
     for old in inp.glob(f"{view}_*"):
         old.unlink()
@@ -190,7 +204,7 @@ async def replace_view(job_id: str, background: BackgroundTasks, view: str = For
     (inp / name).write_bytes(await file.read())
     inputs = sorted({*(i for i in job["inputs"] if not i.startswith(f"{view}_")), name})
     _write_job(d, inputs=inputs, status="processing", error=None, error_view=None)
-    background.add_task(process_views, d, None, True)
+    background.add_task(process_views, d, None, True)  # reservado arriba
     return {"status": "queued"}
 
 

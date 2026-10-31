@@ -4,7 +4,7 @@ from __future__ import annotations
 import cv2
 import numpy as np
 
-from .markers import MARGIN_MM, MARKER_MM, marker_corners_mm
+from .markers import marker_corners_mm
 
 
 class NoShapeFound(Exception):

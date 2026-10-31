@@ -72,7 +72,8 @@ def test_video_job_end_to_end(tmp_path, monkeypatch):
 
     make_video(tmp_path / "v.mp4")
     c = TestClient(main.app)
-    r = c.post("/api/jobs", data={"mode": "video"}, files=[("files", ("v.mp4", (tmp_path / "v.mp4").read_bytes(), "video/mp4"))])
+    video = [("files", ("v.mp4", (tmp_path / "v.mp4").read_bytes(), "video/mp4"))]
+    r = c.post("/api/jobs", data={"mode": "video"}, files=video)
     jid = r.json()["id"]
     job = c.get(f"/api/jobs/{jid}").json()
     assert job["status"] == "done", job
@@ -91,5 +92,6 @@ def test_clear_error_without_mac(tmp_path, monkeypatch):
     monkeypatch.setattr(pipeline_video.sys, "platform", "linux")
     make_video(tmp_path / "v.mp4")
     c = TestClient(main.app)
-    jid = c.post("/api/jobs", data={"mode": "video"}, files=[("files", ("v.mp4", (tmp_path / "v.mp4").read_bytes(), "video/mp4"))]).json()["id"]
+    video = [("files", ("v.mp4", (tmp_path / "v.mp4").read_bytes(), "video/mp4"))]
+    jid = c.post("/api/jobs", data={"mode": "video"}, files=video).json()["id"]
     assert "solo está disponible en el Mac" in c.get(f"/api/jobs/{jid}").json()["error"]
