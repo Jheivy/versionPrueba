@@ -7,6 +7,7 @@ const STEPS = {
   video: [["uploaded", "Subida"], ["frames", "Eligiendo fotogramas"], ["reconstruction", "Reconstruyendo en 3D"], ["cleaning", "Limpiando la malla"], ["exporting", "Exportando STL"]],
 };
 const VIEW_LABEL = { planta: "Planta", alzado: "Alzado", perfil: "Perfil" };
+const DIM_LABEL = { ancho: "Ancho (X)", fondo: "Fondo (Y)", alto: "Alto (Z)" };
 const holeName = (x) => `Ø${fmt(x.diam)} mm · ${VIEW_LABEL[x.view].toLowerCase()} ${x.n}`;
 const mmss = (ms) => { const s = Math.max(0, Math.round(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };
 
@@ -52,6 +53,27 @@ export function detalle(root, { id }) {
       j.mode === "video" && h("p", { class: "muted small", style: "margin:0" }, "La reconstrucción tarda unos 5–10 minutos. Puedes cerrar la app: el trabajo sigue en el Mac.")));
   }
 
+  /* ---------- Vistas que no cuadran ---------- */
+  async function unify() {
+    try {
+      await post(`/jobs/${id}/params`, { ...(j.params || {}), unificar: 1 });
+      toast("Unificando…");
+      setTimeout(load, 500);
+    } catch (e) { toast(e.message, { kind: "err" }); }
+  }
+
+  function mismatchBanner(inReview) {
+    if (!j.warnings?.length) return null;
+    return h("div", { class: "banner", role: "alert" }, icon("alert"), h("div", { class: "stack", style: "gap:6px" },
+      h("b", {}, j.warnings.length > 1 ? "Varias medidas no cuadran entre las vistas" : "Una medida no cuadra entre las vistas"),
+      ...j.warnings.map((w) => h("div", { class: "small num" },
+        `${DIM_LABEL[w.dim]}: ${VIEW_LABEL[w.views[0]].toLowerCase()} ${fmt(w.values[0])} mm · ${VIEW_LABEL[w.views[1]].toLowerCase()} ${fmt(w.values[1])} mm (difieren ${fmt(w.diff)})`)),
+      h("div", { class: "small" }, inReview
+        ? "El modelo se recorta a la vista más pequeña. Repite la foto que falle o unifica con el promedio."
+        : "El modelo se recortó a la vista más pequeña. Mide con calibre en «Ajustar medidas» o unifica con el promedio."),
+      h("button", { class: "btn", onclick: unify }, "Unificar (promedio)")));
+  }
+
   /* ---------- Revisión de contornos ---------- */
   async function retake(view) {
     const f = await pickFile("image/*", true);
@@ -81,10 +103,11 @@ export function detalle(root, { id }) {
       go.disabled = true;
       try { await post(`/jobs/${id}/confirm`); load(); } catch (e) { go.disabled = false; toast(e.message, { kind: "err" }); }
     } }, "Continuar");
-    body.replaceChildren(
+    body.replaceChildren(...[
       h("p", { class: "muted" }, "Comprueba que el contorno azul sigue bien la pieza y los agujeros (naranja). Las rectas ya están enderezadas. Si algo no cuadra, repite la foto."),
+      mismatchBanner(true),
       ...views.map(viewCard),
-      h("div", { class: "actionbar", style: "grid-template-columns:1fr" }, go));
+      h("div", { class: "actionbar", style: "grid-template-columns:1fr" }, go)].filter(Boolean));
   }
 
   /* ---------- Error ---------- */
@@ -113,6 +136,7 @@ export function detalle(root, { id }) {
       hasStl ? h("div", { class: "viewer" }, canvas, fb, tools) : h("div", { class: "banner" }, icon("alert"), "OpenSCAD no está instalado en el Mac, así que no se generó el STL. Descarga el .scad o instala OpenSCAD."),
       h("div", { class: "dims" }, h("div", {}, h("strong", { class: "num" }, fmtDims(j.dims)), h("div", { class: "muted small" }, "Ancho × fondo × alto")),
         h("span", { class: "chip ok" }, icon("check"), "Listo")),
+      mismatchBanner(false),
       j.holes?.length > 0 && h("div", { class: "holes", "aria-label": "Agujeros detectados" },
         h("div", { class: "muted small" }, `${j.holes.length} ${j.holes.length === 1 ? "agujero detectado" : "agujeros detectados"}`),
         h("div", { class: "chips" }, j.holes.map((x) => h("span", { class: "chip" }, holeName(x), x.std && h("span", { class: "muted" }, ` · posible ${x.std}`))))),

@@ -39,6 +39,17 @@ vértices y ángulos de 90°, y un `.scad` mucho más legible. Un dibujo torcido
 - Límite: con ruido > ±0,15 mm en el contorno, el enderezado es parcial (no deforma, deja parte del ruido). Los
   escalones < 0,5 mm se consideran ruido y desaparecen.
 
+## Coherencia entre vistas
+Cada dimensión aparece en dos vistas y debe medir lo mismo: **ancho** (planta y alzado), **fondo** (planta y perfil) y
+**alto** (alzado y perfil). Si difieren más de 0,8 mm (o el 2 % en piezas grandes) la app lo avisa **antes de generar**
+(pantalla de revisión) y también en el resultado, con las dos medidas. El sólido es la intersección de las tres
+extrusiones, así que se recorta a la vista más pequeña y las medidas mostradas son las del sólido real.
+- **Unificar (promedio):** estira las dos vistas al promedio (`unificar: 1` en `/params`).
+- **Cota con calibre:** cada vista se estira hasta la cota desde **su propio** tamaño (antes se aplicaba el factor de la
+  planta a todas, y un alzado más estrecho seguía recortando la pieza: una cota de 40 mm daba 36,98 mm).
+- O repetir la foto que falle desde la revisión.
+- `job.json` incluye `warnings` (`dim`, `views`, `values`, `diff`); vacío cuando todo cuadra.
+
 ## Arranque en el Mac
 ```bash
 brew install openscad mkcert && mkcert -install

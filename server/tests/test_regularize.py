@@ -136,8 +136,13 @@ def test_pipeline_straightens_slightly_tilted_part(tmp_path, monkeypatch):
     m = trimesh.load(d / "output" / "pieza.stl")
     assert m.volume == pytest.approx(40 * 20 * 30, rel=0.02)
 
+    def planta_width():  # ancho del contorno de la planta que quedó en el .scad
+        pts = re.search(r"module planta\(\).*?points=\[(.*?)\], paths", (d / "output" / "pieza.scad").read_text())
+        return max(float(x) for x, _ in re.findall(r"\[([-\d.]+),([-\d.]+)\]", pts.group(1)))
+
+    assert planta_width() == pytest.approx(40.0, abs=0.3)
     pipeline.process_views(d, {"enderezar": 0})  # sin enderezar, la caja del contorno inclinado es mayor
-    assert jobs.read(d)["dims"]["ancho"] > 40.3
+    assert planta_width() > 40.3
     assert jobs.read(d)["params"] == {"enderezar": 0.0}
 
 
