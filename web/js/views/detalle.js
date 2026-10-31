@@ -82,7 +82,7 @@ export function detalle(root, { id }) {
       try { await post(`/jobs/${id}/confirm`); load(); } catch (e) { go.disabled = false; toast(e.message, { kind: "err" }); }
     } }, "Continuar");
     body.replaceChildren(
-      h("p", { class: "muted" }, "Comprueba que el contorno azul sigue bien la pieza y los agujeros (naranja). Si no, repite la foto."),
+      h("p", { class: "muted" }, "Comprueba que el contorno azul sigue bien la pieza y los agujeros (naranja). Las rectas ya están enderezadas. Si algo no cuadra, repite la foto."),
       ...views.map(viewCard),
       h("div", { class: "actionbar", style: "grid-template-columns:1fr" }, go));
   }
@@ -140,7 +140,11 @@ export function detalle(root, { id }) {
     const form = h("form", { class: "stack", onsubmit: async (e) => {
       e.preventDefault();
       const b = {};
-      for (const el of form.elements) if (el.name && el.value !== "") b[el.name] = el.tagName === "SELECT" ? el.value : Number(el.value);
+      for (const el of form.elements) {
+        if (!el.name) continue;
+        if (el.type === "checkbox") b[el.name] = Number(el.checked);
+        else if (el.value !== "") b[el.name] = el.tagName === "SELECT" ? el.value : Number(el.value);
+      }
       close();
       try { await post(`/jobs/${id}/params`, b); toast("Regenerando…"); setTimeout(load, 500); } catch (er) { toast(er.message, { kind: "err" }); }
     } },
@@ -150,6 +154,9 @@ export function detalle(root, { id }) {
              [["medium", "Medio"], ["full", "Alto (más lento)"], ["reduced", "Bajo (rápido)"]].map(([v, t]) => h("option", { value: v, selected: (p.detalle || "medium") === v }, t))))]
         : [h("div", { class: "field-grid" }, num("ancho", "Ancho X", fmt(det.ancho ?? 0)), num("fondo", "Fondo Y", fmt(det.fondo ?? 0)), num("alto", "Alto Z", fmt(det.alto ?? 0))),
            ...(j.holes || []).map((x) => num(`d_${x.view}_${x.n}`, `Ø agujero (${VIEW_LABEL[x.view].toLowerCase()} ${x.n})`, fmt(x.diam), "0.05")),
+           h("label", { class: "toggle" }, h("span", {}, h("b", {}, "Enderezar contornos"), h("br"),
+             h("span", { class: "muted small" }, "Rectas y ángulos de 90° exactos (hasta ~4° de desvío)")),
+             h("input", { type: "checkbox", name: "enderezar", checked: (p.enderezar ?? 1) !== 0 })),
            h("div", { class: "field" }, "Holgura (mm)", h("div", { class: "stepper" },
              h("button", { type: "button", class: "btn", "aria-label": "Menos", onclick: () => bump(-0.05) }, "−"), holgura,
              h("button", { type: "button", class: "btn", "aria-label": "Más", onclick: () => bump(0.05) }, "+")), presets)],

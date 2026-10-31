@@ -17,12 +17,13 @@ from . import jobs
 from .views.contours import NoShapeFound, extract
 from .views.holes import finalize, split_circles
 from .views.rectify import MarkersNotFound, rectify
+from .views.regularize import regularize_view
 from .views.scad_writer import build_scad
 
 PX = 10.0
 OUT_DIR = Path(os.environ.get("SCAN2PRINT_OUT", Path.home() / "Scan2Print" / "out"))
 WEBHOOK = os.environ.get("SCAN2PRINT_WEBHOOK")  # URL que recibe un POST JSON al terminar
-PARAM_KEYS = ("ancho", "fondo", "alto", "holgura")  # cotas objetivo (mm) y holgura
+PARAM_KEYS = ("ancho", "fondo", "alto", "holgura", "enderezar")  # cotas (mm), holgura y enderezado 0/1
 HOLE_KEY = re.compile(r"d_(planta|alzado|perfil)_(\d+)")  # Ø medido de un agujero, p. ej. d_planta_1
 
 
@@ -121,6 +122,10 @@ def process_views(d: Path, params: dict | None = None, pause_for_review: bool = 
                 _set(d, status="review", step="review")
                 return
             _step(d, "modeling")
+            if params.get("enderezar", 1.0) != 0:
+                for name in views:
+                    views[name], (dx, dy) = regularize_view(views[name])
+                    circles[name] = [(cx - dx, cy - dy, dm) for cx, cy, dm in circles[name]]
 
             detected = _dims(views)
             if detected["alto"] is None:  # solo planta: extrusión plana

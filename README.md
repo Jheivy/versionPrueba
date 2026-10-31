@@ -27,6 +27,18 @@ pos_agujero_planta_1 = [12.300, 8.100];
 - Los huecos que no son círculos (cuadrados, hexágonos, ranuras) y los de Ø < ~2,5 mm se mantienen como polígono.
 - El contorno pasa por los píxeles del borde del material, así que el Ø se corrige 1 píxel (0,1 mm); el error en pruebas sintéticas es ≤ 0,1 mm.
 
+## Enderezado de contornos
+Antes de generar el modelo, los contornos se «enderezan» (`server/app/views/regularize.py`): los tramos que siguen
+siendo una recta (±0,3 mm) se funden en una arista, las casi horizontales/verticales (hasta ~4°) pasan a serlo
+exactamente y las esquinas son la intersección de rectas vecinas. Resultado: rectángulos, L, U… con el nº exacto de
+vértices y ángulos de 90°, y un `.scad` mucho más legible. Un dibujo torcido 2° mide 40,0 × 19,9 en vez de 40,6 × 21,3.
+- **No se toca** un contorno si menos de la mitad de su perímetro son rectas (círculos, elipses, piezas redondas),
+  ni uno inclinado ≥ ~6° (se asume que lo es a propósito), ni si el cambio de área supera el 4 %.
+- Se puede desactivar por trabajo con el interruptor *Enderezar contornos* en *Ajustar medidas*.
+- La pantalla de revisión muestra ya el contorno enderezado: es el mismo que usará el modelo.
+- Límite: con ruido > ±0,15 mm en el contorno, el enderezado es parcial (no deforma, deja parte del ruido). Los
+  escalones < 0,5 mm se consideran ruido y desaparecen.
+
 ## Arranque en el Mac
 ```bash
 brew install openscad mkcert && mkcert -install
