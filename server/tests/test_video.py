@@ -60,7 +60,10 @@ def test_video_job_end_to_end(tmp_path, monkeypatch):
     monkeypatch.setattr(pipeline, "OUT_DIR", tmp_path / "out")
     monkeypatch.setattr(pipeline, "_notify", lambda p: None)
 
+    calls = []
+
     def fake_capture(frames, out, detail="medium"):
+        calls.append(detail)
         assert len(list(frames.glob("*.jpg"))) >= 10
         out.mkdir()
         fake_obj(out / "model.obj")
@@ -77,6 +80,9 @@ def test_video_job_end_to_end(tmp_path, monkeypatch):
     c.post(f"/api/jobs/{jid}/params", json={"largo": 50})
     job = c.get(f"/api/jobs/{jid}").json()
     assert job["dims"]["ancho"] == pytest.approx(50, abs=0.1) and not job["mesh"]["scale_estimated"]
+    assert calls == ["medium"]  # el reescalado reutilizó el .obj
+    c.post(f"/api/jobs/{jid}/params", json={"largo": 80, "detalle": "full"})
+    assert calls == ["medium", "full"]  # otro detalle sí reconstruye
     assert list((tmp_path / "out").glob("*.stl"))
 
 

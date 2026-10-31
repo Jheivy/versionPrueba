@@ -42,7 +42,7 @@ export SCAN2PRINT_OBJECT_CAPTURE="$PWD/.build/release/scan2print-object-capture"
 $SCAN2PRINT_OBJECT_CAPTURE ./fotos ./salida medium && ls salida
 ```
 Flujo: vídeo → fotogramas nítidos (`photogrammetry/frames.py`) → CLI → `.obj` → `mesh.py` (mayor fragmento, Y-up→Z-up, m→mm, rellena huecos, apoya en Z=0) → `pieza.stl`.
-La escala de Object Capture es aproximada: indica en la app la **dimensión más larga medida con calibre** y se regenera sin repetir la reconstrucción pesada… (hoy la repite; mejora pendiente).
+La escala de Object Capture es aproximada: indica en la app la **dimensión más larga medida con calibre**. El `.obj` se guarda en `work/` del trabajo y corregir la escala solo reprocesa la malla (segundos); cambiar el `detalle` sí repite la reconstrucción.
 
 **Cosas a verificar en el Mac (no se han podido ejecutar aquí):**
 1. Que `swift build` compila (API `PhotogrammetrySession`).
