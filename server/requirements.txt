@@ -2,8 +2,9 @@ fastapi>=0.110
 uvicorn[standard]>=0.29
 python-multipart>=0.0.9
 # Hitos siguientes:
-# opencv-contrib-python>=4.9
-# numpy
+opencv-contrib-python-headless>=4.9
+numpy
+pillow
 # trimesh
 # shapely
 # zeroconf
