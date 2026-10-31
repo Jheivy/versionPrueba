@@ -6,6 +6,7 @@ import numpy as np
 
 from .contours import extract
 from .rectify import rectify
+from .regularize import regularize
 
 PX = 10.0
 
@@ -15,6 +16,7 @@ def render_preview(image: np.ndarray, max_side: int = 900) -> tuple[bytes, dict]
     (azul) y los huecos (naranja) dibujados encima."""
     sheet = rectify(image, PX)
     polys, (ox, oy) = extract(sheet, PX, return_origin=True)
+    polys = [regularize(p) for p in polys]  # lo mismo que usará el modelo
     pts = [np.array([[(ox + x) * PX, (oy - y) * PX] for x, y in p]) for p in polys]  # px en la hoja
     allp = np.concatenate(pts)
     pad = 8 * PX
@@ -30,5 +32,5 @@ def render_preview(image: np.ndarray, max_side: int = 900) -> tuple[bytes, dict]
         crop = cv2.resize(crop, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
     outer = np.array(polys[0])
     return cv2.imencode(".png", crop)[1].tobytes(), {
-        "ancho": round(float(outer[:, 0].max()), 1), "alto": round(float(outer[:, 1].max()), 1),
+        "ancho": round(float(np.ptp(outer[:, 0])), 1), "alto": round(float(np.ptp(outer[:, 1])), 1),
         "huecos": len(polys) - 1}
