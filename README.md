@@ -39,6 +39,36 @@ vértices y ángulos de 90°, y un `.scad` mucho más legible. Un dibujo torcido
 - Límite: con ruido > ±0,15 mm en el contorno, el enderezado es parcial (no deforma, deja parte del ruido). Los
   escalones < 0,5 mm se consideran ruido y desaparecen.
 
+## Coherencia entre vistas
+Cada dimensión aparece en dos vistas y debe medir lo mismo: **ancho** (planta y alzado), **fondo** (planta y perfil) y
+**alto** (alzado y perfil). Si difieren más de 0,8 mm (o el 2 % en piezas grandes) la app lo avisa **antes de generar**
+(pantalla de revisión) y también en el resultado, con las dos medidas. El sólido es la intersección de las tres
+extrusiones, así que se recorta a la vista más pequeña y las medidas mostradas son las del sólido real.
+- **Unificar (promedio):** estira las dos vistas al promedio (`unificar: 1` en `/params`).
+- **Cota con calibre:** cada vista se estira hasta la cota desde **su propio** tamaño (antes se aplicaba el factor de la
+  planta a todas, y un alzado más estrecho seguía recortando la pieza: una cota de 40 mm daba 36,98 mm).
+- O repetir la foto que falle desde la revisión.
+- `job.json` incluye `warnings` (`dim`, `views`, `values`, `diff`); vacío cuando todo cuadra.
+
+## Diseño y rendimiento
+**Diseño** (`web/css/`, `web/js/`): sistema de tokens claro/oscuro con acento azul→violeta, tipografía Inter (local),
+barra inferior flotante con pastilla animada, tarjetas con profundidad, esqueletos de carga, transiciones entre
+pantallas (View Transitions API, con el sentido según la navegación), hápticos (ajustable en *Ajustes*) y gestos:
+deslizar una tarjeta para borrarla, arrastrar una hoja inferior para cerrarla y tirar de la lista para actualizar.
+Respeta `prefers-reduced-motion`.
+
+**Velocidad, sin paso de compilación:**
+- three.js (minificado) y la fuente se sirven desde el propio Mac (`web/vendor/`, `web/fonts/`): la app ya no
+  necesita internet. Licencias en `web/vendor/LICENSE-three.txt` y `web/fonts/LICENSE-inter-OFL.txt`.
+- Cada pantalla se carga bajo demanda y, en reposo, las demás se precargan con `modulepreload` (sin ejecutarlas).
+- El servidor comprime (gzip) y cachea: `vendor/` y `fonts/` son inmutables, el resto se revalida con ETag y los
+  modelos `…/pieza.stl?v=<rev>` son inmutables (la revisión cambia al regenerar).
+- El service worker lo **genera el servidor** a partir de los archivos reales (`GET /sw.js`): la versión es un hash del
+  contenido, así no hay listas ni versiones que mantener a mano. La app abre sin red.
+- Las fotos se reducen a ≤ 3000 px en el móvil antes de subirlas (4–8 MB → ~1–2 MB).
+- Medido con un móvil emulado (30 Mbps, 40 ms, CPU 4× más lenta): abrir un modelo pasa de 755 a 652 ms (frío) y de
+  624 a 493 ms (repetido), y deja de descargar 261 kB de internet.
+
 ## Arranque en el Mac
 ```bash
 brew install openscad mkcert && mkcert -install

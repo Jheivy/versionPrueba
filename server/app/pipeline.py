@@ -7,6 +7,7 @@ import os
 import re
 import shutil
 import subprocess
+import time
 import urllib.request
 from datetime import datetime
 from pathlib import Path
@@ -14,6 +15,7 @@ from pathlib import Path
 import cv2
 
 from . import jobs
+from .views import coherence
 from .views.contours import NoShapeFound, extract
 from .views.holes import finalize, split_circles
 from .views.rectify import MarkersNotFound, rectify
@@ -23,7 +25,7 @@ from .views.scad_writer import build_scad
 PX = 10.0
 OUT_DIR = Path(os.environ.get("SCAN2PRINT_OUT", Path.home() / "Scan2Print" / "out"))
 WEBHOOK = os.environ.get("SCAN2PRINT_WEBHOOK")  # URL que recibe un POST JSON al terminar
-PARAM_KEYS = ("ancho", "fondo", "alto", "holgura", "enderezar")  # cotas (mm), holgura y enderezado 0/1
+PARAM_KEYS = ("ancho", "fondo", "alto", "holgura", "enderezar", "unificar")  # cotas (mm), holgura, flags 0/1
 HOLE_KEY = re.compile(r"d_(planta|alzado|perfil)_(\d+)")  # Ø medido de un agujero, p. ej. d_planta_1
 
 
@@ -82,13 +84,6 @@ def _scale_circles(circles, sx, sy):
     return [(cx * sx, cy * sy, (d - 1 / PX) * math.sqrt(sx * sy)) for cx, cy, d in circles]
 
 
-def _dims(views, altura=None):
-    ancho, fondo = (max(p[i] for c in views["planta"] for p in c) for i in (0, 1))
-    other = views.get("alzado") or views.get("perfil")
-    alto = max(p[1] for c in other for p in c) if other else altura
-    return {"ancho": ancho, "fondo": fondo, "alto": alto}
-
-
 def process_views(d: Path, params: dict | None = None, pause_for_review: bool = False) -> None:
     """Procesa las fotos de `input/`. `params` admite ancho/fondo/alto (cotas medidas
     con calibre, mm; reescalan la pieza) y holgura (offset de contorno, mm)."""
@@ -118,35 +113,39 @@ def process_views(d: Path, params: dict | None = None, pause_for_review: bool = 
                                               "Colócala sobre la hoja con fondo claro.")
             if "planta" not in views:
                 raise ViewError("planta", "Falta la foto de planta.")
-            if pause_for_review:
-                _set(d, status="review", step="review")
-                return
-            _step(d, "modeling")
-            if params.get("enderezar", 1.0) != 0:
+            if params.get("enderezar", 1.0) != 0:  # antes de medir: las revisiones y el modelo ven lo mismo
                 for name in views:
                     views[name], (dx, dy) = regularize_view(views[name])
                     circles[name] = [(cx - dx, cy - dy, dm) for cx, cy, dm in circles[name]]
+            sizes = coherence.sizes(views)
+            if pause_for_review:
+                _set(d, status="review", step="review", warnings=coherence.check(sizes))
+                return
+            _step(d, "modeling")
 
-            detected = _dims(views)
+            shared = coherence.shared_dims(sizes)
+            # sin cota ni unificación el sólido es la intersección: manda la vista más pequeña
+            detected = {dim: min(v for _, v in vals) if vals else None for dim, vals in shared.items()}
             if detected["alto"] is None:  # solo planta: extrusión plana
                 detected["alto"] = params.get("alto", 5.0)
-            k = {a: params[a] / detected[a] if a in params and detected[a] else 1.0 for a in ("ancho", "fondo", "alto")}
-            views["planta"] = _scale(views["planta"], k["ancho"], k["fondo"])
-            if "alzado" in views:
-                views["alzado"] = _scale(views["alzado"], k["ancho"], k["alto"])
-            if "perfil" in views:
-                views["perfil"] = _scale(views["perfil"], k["fondo"], k["alto"])
-            altura = detected["alto"] * k["alto"]
-            axes = {"planta": (k["ancho"], k["fondo"]), "alzado": (k["ancho"], k["alto"]),
-                    "perfil": (k["fondo"], k["alto"])}
+            target = coherence.targets(sizes, params, unify=params.get("unificar", 0.0) != 0)
+            factors = {}  # cada vista se ajusta a la medida final desde SU propio tamaño
+            for view, (dx_, dy_) in coherence.VIEW_AXES.items():
+                if view in views:
+                    own = sizes[view]
+                    factors[view] = tuple(target[dim] / own[i] if dim in target and own[i] else 1.0
+                                          for i, dim in enumerate((dx_, dy_)))
+                    views[view] = _scale(views[view], *factors[view])
+            altura = target.get("alto", detected["alto"])
             final, holes = {}, []
             for view, cs in circles.items():
                 final[view] = []
-                for n, (cx, cy, dm) in enumerate(_scale_circles(cs, *axes[view]), 1):
+                for n, (cx, cy, dm) in enumerate(_scale_circles(cs, *factors[view]), 1):
                     measured = params.get(f"d_{view}_{n}")
                     diam, std = finalize(measured if measured else dm)
                     final[view].append((cx, cy, diam, std))
                     holes.append({"view": view, "n": n, "diam": diam, "x": round(cx, 2), "y": round(cy, 2), "std": std})
+            warnings = coherence.check(coherence.sizes(views))  # lo que siga sin cuadrar tras ajustar
 
             out = d / "output"
             out.mkdir(exist_ok=True)
@@ -160,10 +159,11 @@ def process_views(d: Path, params: dict | None = None, pause_for_review: bool = 
                 subprocess.run(["openscad", "-q", "-o", str(out / "pieza.stl"), str(out / "pieza.scad")],
                                check=True, capture_output=True, timeout=300)
                 outputs.append("pieza.stl")
-            dims = {a: detected[a] * k[a] for a in k}
+            dims = {dim: target.get(dim, detected[dim]) for dim in detected}
             exported = _export(d, d.name)
-            _set(d, status="done", step=None, outputs=outputs, detected=detected, params=params,
-                 dims=dims, holes=holes, exported=exported)
+            rev = time.time_ns() // 1_000_000  # nueva revisión: invalida las cachés del navegador
+            _set(d, status="done", rev=rev, step=None, outputs=outputs, detected=detected, params=params,
+                 dims=dims, holes=holes, warnings=warnings, exported=exported)
             _notify({"event": "job.done", "id": d.name, "dims": dims, "files": exported})
         except ViewError as e:
             _set(d, status="error", step=None, error=str(e), error_view=e.view)

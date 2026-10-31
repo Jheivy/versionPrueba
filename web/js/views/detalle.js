@@ -1,5 +1,6 @@
 import { api, post, patch, del, upload, pref } from "../api.js";
-import { h, icon, toast, openSheet, confirmSheet, fmt, fmtDims, jobName, slug, topBar, pickFile } from "../ui.js";
+import { animateValue, confirmSheet, fmt, fmtDims, h, haptic, icon, jobName, openSheet, pickFile, slug, toast, topBar } from "../ui.js";
+import { prepareImage } from "../image.js";
 import { navigate } from "../router.js";
 
 const STEPS = {
@@ -7,12 +8,16 @@ const STEPS = {
   video: [["uploaded", "Subida"], ["frames", "Eligiendo fotogramas"], ["reconstruction", "Reconstruyendo en 3D"], ["cleaning", "Limpiando la malla"], ["exporting", "Exportando STL"]],
 };
 const VIEW_LABEL = { planta: "Planta", alzado: "Alzado", perfil: "Perfil" };
+const DIM_LABEL = { ancho: "Ancho (X)", fondo: "Fondo (Y)", alto: "Alto (Z)" };
 const holeName = (x) => `Ø${fmt(x.diam)} mm · ${VIEW_LABEL[x.view].toLowerCase()} ${x.n}`;
 const mmss = (ms) => { const s = Math.max(0, Math.round(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };
 
 export function detalle(root, { id }) {
   let j, timer = 0, tick = 0, viewer = null, gone = false, last = null;
-  const head = h("div"), body = h("div", { class: "stack" });
+  const head = h("div"), body = h("div", { class: "stack stagger" });
+  let prog = null, dimsShown = false;
+  body.append(h("div", { class: "viewer" }, h("div", { class: "skeleton" })),
+    h("div", { class: "skeleton sk-line", style: "width:55%;height:28px;margin:6px 4px" }));   // mientras llegan los datos
   root.append(head, body);
   const fileUrl = (n) => `/api/jobs/${id}/files/${n}`;
 
@@ -29,6 +34,8 @@ export function detalle(root, { id }) {
     if (last === "processing" && j.status === "done" && pref("notify", false) && document.hidden && Notification?.permission === "granted") {
       new Notification("Pieza lista", { body: jobName(j) });
     }
+    if ((last === "processing" || last === "uploaded") && j.status === "done") haptic("success");
+    if ((last === "processing" || last === "uploaded") && j.status === "error") haptic("error");
     last = j.status;
     viewer?.dispose(); viewer = null;
     head.replaceChildren(topBar(jobName(j), { actions: [h("button", { class: "icon-btn", "aria-label": "Opciones", onclick: openMenu }, icon("more"))] }));
@@ -41,22 +48,53 @@ export function detalle(root, { id }) {
   /* ---------- Progreso ---------- */
   function progress() {
     const steps = STEPS[j.mode], cur = Math.max(0, steps.findIndex((s) => s[0] === (j.step || "uploaded")));
-    const elapsed = h("span", { class: "num muted" });
-    const upd = () => { elapsed.textContent = mmss(Date.now() - new Date(j.created)); };
+    if (!prog || !prog.root.isConnected) {                 // se crea una vez y luego se actualiza en el sitio
+      const elapsed = h("span", { class: "num muted" });
+      const items = steps.map(([, t]) => h("li", {}, h("span", { class: "mark" }), t));
+      const root = h("div", { class: "card stack" },
+        h("div", { class: "row" }, h("strong", { class: "grow" }, "Procesando…"), elapsed),
+        h("ol", { class: "stepper-v", "aria-label": "Pasos" }, items),
+        j.mode === "video" && h("p", { class: "muted small", style: "margin:0" }, "La reconstrucción tarda unos 5–10 minutos. Puedes cerrar la app: el trabajo sigue en el Mac."));
+      prog = { root, elapsed, items, cur: -1 };
+      body.replaceChildren(root);
+    }
+    prog.items.forEach((li, i) => {
+      li.className = i < cur ? "done" : i === cur ? "active" : "";
+      if (i === cur) li.setAttribute("aria-current", "step"); else li.removeAttribute("aria-current");
+      li.firstChild.replaceChildren(i < cur ? icon("check") : "");
+    });
+    if (prog.cur !== -1 && cur > prog.cur) haptic("tick");
+    prog.cur = cur;
+    const upd = () => { prog.elapsed.textContent = mmss(Date.now() - new Date(j.created)); };
     upd(); tick = setInterval(upd, 1000);
-    body.replaceChildren(h("div", { class: "card stack" },
-      h("div", { class: "row" }, h("strong", { class: "grow" }, "Procesando…"), elapsed),
-      h("ol", { class: "stepper-v", "aria-label": "Pasos" }, steps.map(([, t], i) =>
-        h("li", { class: i < cur ? "done" : i === cur ? "active" : "", "aria-current": i === cur ? "step" : null },
-          h("span", { class: "mark" }, i < cur ? icon("check") : ""), t))),
-      j.mode === "video" && h("p", { class: "muted small", style: "margin:0" }, "La reconstrucción tarda unos 5–10 minutos. Puedes cerrar la app: el trabajo sigue en el Mac.")));
+  }
+
+  /* ---------- Vistas que no cuadran ---------- */
+  async function unify() {
+    try {
+      await post(`/jobs/${id}/params`, { ...(j.params || {}), unificar: 1 });
+      toast("Unificando…");
+      setTimeout(load, 500);
+    } catch (e) { toast(e.message, { kind: "err" }); }
+  }
+
+  function mismatchBanner(inReview) {
+    if (!j.warnings?.length) return null;
+    return h("div", { class: "banner", role: "alert" }, icon("alert"), h("div", { class: "stack", style: "gap:6px" },
+      h("b", {}, j.warnings.length > 1 ? "Varias medidas no cuadran entre las vistas" : "Una medida no cuadra entre las vistas"),
+      ...j.warnings.map((w) => h("div", { class: "small num" },
+        `${DIM_LABEL[w.dim]}: ${VIEW_LABEL[w.views[0]].toLowerCase()} ${fmt(w.values[0])} mm · ${VIEW_LABEL[w.views[1]].toLowerCase()} ${fmt(w.values[1])} mm (difieren ${fmt(w.diff)})`)),
+      h("div", { class: "small" }, inReview
+        ? "El modelo se recorta a la vista más pequeña. Repite la foto que falle o unifica con el promedio."
+        : "El modelo se recortó a la vista más pequeña. Mide con calibre en «Ajustar medidas» o unifica con el promedio."),
+      h("button", { class: "btn", onclick: unify }, "Unificar (promedio)")));
   }
 
   /* ---------- Revisión de contornos ---------- */
   async function retake(view) {
     const f = await pickFile("image/*", true);
     if (!f) return;
-    const fd = new FormData(); fd.append("view", view); fd.append("file", f, `${view}.jpg`);
+    const fd = new FormData(); fd.append("view", view); fd.append("file", await prepareImage(f), `${view}.jpg`);
     try { await upload(`/jobs/${id}/inputs`, fd); load(); } catch (e) { toast(e.message, { kind: "err" }); }
   }
 
@@ -79,12 +117,13 @@ export function detalle(root, { id }) {
     const views = Object.keys(VIEW_LABEL).filter((v) => j.inputs.some((i) => i.startsWith(v + "_")));
     const go = h("button", { class: "btn btn-primary", onclick: async () => {
       go.disabled = true;
-      try { await post(`/jobs/${id}/confirm`); load(); } catch (e) { go.disabled = false; toast(e.message, { kind: "err" }); }
+      haptic("tap"); try { await post(`/jobs/${id}/confirm`); load(); } catch (e) { go.disabled = false; toast(e.message, { kind: "err" }); }
     } }, "Continuar");
-    body.replaceChildren(
+    body.replaceChildren(...[
       h("p", { class: "muted" }, "Comprueba que el contorno azul sigue bien la pieza y los agujeros (naranja). Las rectas ya están enderezadas. Si algo no cuadra, repite la foto."),
+      mismatchBanner(true),
       ...views.map(viewCard),
-      h("div", { class: "actionbar", style: "grid-template-columns:1fr" }, go));
+      h("div", { class: "actionbar", style: "grid-template-columns:1fr" }, go)].filter(Boolean));
   }
 
   /* ---------- Error ---------- */
@@ -101,18 +140,24 @@ export function detalle(root, { id }) {
   async function done() {
     const hasStl = j.outputs.includes("pieza.stl");
     const canvas = h("canvas", { "aria-label": "Vista 3D de la pieza" });
-    const fb = h("div", { class: "fallback", hidden: true }, "El visor 3D necesita conexión a internet. Puedes descargar el archivo igualmente.");
+    const fb = h("div", { class: "fallback", hidden: true }, "No se pudo cargar el visor 3D. Puedes descargar el archivo igualmente.");
     let gridOn = true;
     const gridBtn = h("button", { "aria-label": "Rejilla de 1 cm", "aria-pressed": "true", onclick: () => { gridOn = !gridOn; gridBtn.setAttribute("aria-pressed", String(gridOn)); viewer?.setGrid(gridOn); } }, icon("grid"));
     const tools = h("div", { class: "tools" }, h("button", { "aria-label": "Centrar vista", onclick: () => viewer?.resetView() }, icon("reset")), gridBtn);
     const name = slug(jobName(j));
+    const dimsEl = h("strong", { class: "num" }, fmtDims(j.dims));
+    if (!dimsShown && j.dims) {                              // las medidas "cuentan" hasta su valor la primera vez
+      dimsShown = true;
+      animateValue(dimsEl, (e) => fmtDims({ ancho: j.dims.ancho * e, fondo: j.dims.fondo * e, alto: j.dims.alto * e }));
+    }
     const primary = hasStl
       ? h("a", { class: "btn btn-primary", href: fileUrl("pieza.stl"), download: `${name}.stl` }, icon("download"), "Descargar STL")
       : h("a", { class: "btn btn-primary", href: fileUrl("pieza.scad"), download: `${name}.scad` }, icon("download"), "Descargar .scad");
     body.replaceChildren(...[
-      hasStl ? h("div", { class: "viewer" }, canvas, fb, tools) : h("div", { class: "banner" }, icon("alert"), "OpenSCAD no está instalado en el Mac, así que no se generó el STL. Descarga el .scad o instala OpenSCAD."),
-      h("div", { class: "dims" }, h("div", {}, h("strong", { class: "num" }, fmtDims(j.dims)), h("div", { class: "muted small" }, "Ancho × fondo × alto")),
+      hasStl ? h("div", { class: "viewer" }, h("div", { class: "skeleton" }), canvas, fb, tools) : h("div", { class: "banner" }, icon("alert"), "OpenSCAD no está instalado en el Mac, así que no se generó el STL. Descarga el .scad o instala OpenSCAD."),
+      h("div", { class: "dims" }, h("div", {}, dimsEl, h("div", { class: "muted small" }, "Ancho × fondo × alto")),
         h("span", { class: "chip ok" }, icon("check"), "Listo")),
+      mismatchBanner(false),
       j.holes?.length > 0 && h("div", { class: "holes", "aria-label": "Agujeros detectados" },
         h("div", { class: "muted small" }, `${j.holes.length} ${j.holes.length === 1 ? "agujero detectado" : "agujeros detectados"}`),
         h("div", { class: "chips" }, j.holes.map((x) => h("span", { class: "chip" }, holeName(x), x.std && h("span", { class: "muted" }, ` · posible ${x.std}`))))),
@@ -124,7 +169,10 @@ export function detalle(root, { id }) {
     try {
       viewer = (await import("./../viewer.js")).createViewer(canvas);
       if (gone) { viewer.dispose(); viewer = null; return; }
-      await viewer.load(fileUrl("pieza.stl"));
+      await viewer.load(`${fileUrl("pieza.stl")}?v=${j.rev || 0}`); // ?v= => inmutable en la caché del navegador
+      const box = canvas.closest(".viewer");
+      box.dataset.ready = "1";
+      setTimeout(() => box.querySelector(".skeleton")?.remove(), 400);   // fuera del árbol cuando ya no se ve           // el modelo ya se dibuja (lo usan la animación y las pruebas)
     } catch { canvas.hidden = true; fb.hidden = false; viewer?.dispose(); viewer = null; }
   }
 

@@ -14,6 +14,10 @@ export function createViewer(canvas) {
   scene.add(sun);
   const controls = new OrbitControls(camera, canvas);
   controls.enableDamping = true;
+  controls.autoRotate = true;            // un giro suave al aparecer; se detiene al tocar o a los 6 s
+  controls.autoRotateSpeed = 1.6;
+  controls.addEventListener("start", () => { controls.autoRotate = false; });
+  const stopSpin = setTimeout(() => { controls.autoRotate = false; }, 6000);
   const helpers = new THREE.Group();
   scene.add(helpers);
   let mesh, radius = 50, raf = 0, alive = true;
@@ -63,6 +67,7 @@ export function createViewer(canvas) {
     setGrid(on) { helpers.visible = on; },
     dispose() {
       alive = false;
+      clearTimeout(stopSpin);
       cancelAnimationFrame(raf);
       controls.dispose();
       mesh?.geometry.dispose();

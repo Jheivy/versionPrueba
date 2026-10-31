@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import io
 import json
 import os
@@ -15,7 +16,8 @@ from pathlib import Path
 
 import cv2
 import numpy as np
-from fastapi import BackgroundTasks, Body, FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import BackgroundTasks, Body, FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
@@ -65,6 +67,7 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title="Scan2Print", lifespan=lifespan)
+app.add_middleware(GZipMiddleware, minimum_size=1024)  # JS/CSS/JSON/STL de texto: 3-5x menos bytes por Wi-Fi
 
 
 def _job_dir(job_id: str) -> Path:
@@ -270,14 +273,65 @@ def marker_sheet():
 
 
 @app.get("/api/jobs/{job_id}/files/{name}")
-def get_file(job_id: str, name: str):
+def get_file(job_id: str, name: str, request: Request):
+    """Con `?v=<rev>` (revisión del trabajo) la respuesta es inmutable: el navegador no vuelve a pedirla."""
     d = _job_dir(job_id)
     for sub in ("output", "input"):
         p = d / sub / SAFE_NAME.sub("_", name)
         if p.is_file():
-            return FileResponse(p)
+            cache = "public, max-age=31536000, immutable" if "v" in request.query_params else "no-cache"
+            return FileResponse(p, headers={"Cache-Control": cache})
     raise HTTPException(404, "fichero no encontrado")
 
 
+_SW_CACHE: dict = {}
+
+
+def _sw_source() -> str:
+    """sw.js con la versión y las listas de archivos calculadas a partir de web/ (sin mantenimiento manual).
+    VERSION cambia con cualquier edición de la app; las dependencias inmutables (three.js, fuente, iconos)
+    tienen su propia versión, así actualizar la app no obliga a volver a bajar three.js."""
+    files = sorted(
+        p for p in WEB_DIR.rglob("*")
+        if p.is_file() and p.name != "sw.js" and p.suffix not in (".md", ".txt"))
+    sig = tuple((str(p), p.stat().st_mtime_ns, p.stat().st_size) for p in files)
+    if _SW_CACHE.get("sig") != sig:
+        rel = [p.relative_to(WEB_DIR).as_posix() for p in files]
+        is_vendor = [r.startswith(("vendor/", "fonts/", "icons/")) for r in rel]
+        shell = [r for r, v in zip(rel, is_vendor, strict=True) if not v]
+        vendor = [r for r, v in zip(rel, is_vendor, strict=True) if v]
+        h = hashlib.sha1()
+        for r in shell:
+            h.update(r.encode())
+            h.update((WEB_DIR / r).read_bytes())
+        hv = hashlib.sha1("\n".join(vendor).encode()).hexdigest()[:10]
+        src = (WEB_DIR / "sw.js").read_text()
+        src = src.replace('"/*VERSION*/dev"', json.dumps(h.hexdigest()[:10]))
+        src = src.replace('"/*VENDOR*/dev"', json.dumps(hv))
+        src = src.replace("/*SHELL*/[]", json.dumps(["./", *shell]))
+        src = src.replace("/*VENDORLIST*/[]", json.dumps(vendor))
+        _SW_CACHE.update(sig=sig, src=src)
+    return _SW_CACHE["src"]
+
+
+@app.get("/sw.js", include_in_schema=False)
+def service_worker():
+    return Response(_sw_source(), media_type="text/javascript", headers={"Cache-Control": "no-cache"})
+
+
+class WebFiles(StaticFiles):
+    """La PWA: lo versionado por nombre (vendor/, fonts/) es inmutable; el resto se revalida con ETag
+    (un 304 casi gratis), así una actualización llega sin vaciar cachés."""
+
+    IMMUTABLE = ("vendor/", "fonts/")
+
+    async def get_response(self, path, scope):
+        response = await super().get_response(path, scope)
+        if response.status_code == 200:
+            long = path.startswith(self.IMMUTABLE)
+            response.headers["Cache-Control"] = "public, max-age=31536000, immutable" if long else "no-cache"
+        return response
+
+
 if WEB_DIR.exists():
-    app.mount("/", StaticFiles(directory=WEB_DIR, html=True), name="web")
+    app.mount("/", WebFiles(directory=WEB_DIR, html=True), name="web")
