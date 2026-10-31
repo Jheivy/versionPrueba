@@ -1,6 +1,7 @@
 """Scan2Print hub: recibe fotos desde el móvil y gestiona trabajos de reconstrucción."""
 from __future__ import annotations
 
+import asyncio
 import io
 import json
 import os
@@ -32,26 +33,33 @@ MODES = {"views", "video"}
 VIEW_NAMES = {"planta", "alzado", "perfil"}
 SAFE_NAME = re.compile(r"[^A-Za-z0-9._-]")
 
-@asynccontextmanager
-async def lifespan(_: FastAPI):
-    """Anuncia scan2print.local por mDNS si `zeroconf` está instalado."""
-    zc = info = None
+async def _announce(state: dict) -> None:
+    """Anuncia scan2print.local por mDNS (si `zeroconf` está instalado) sin bloquear el arranque."""
     try:
         import socket
 
-        from zeroconf import ServiceInfo, Zeroconf
+        from zeroconf import ServiceInfo
+        from zeroconf.asyncio import AsyncZeroconf
         port = int(os.environ.get("SCAN2PRINT_PORT", 8443))
-        ip = socket.gethostbyname(socket.gethostname())
+        ip = await asyncio.to_thread(socket.gethostbyname, socket.gethostname())
         info = ServiceInfo("_https._tcp.local.", "Scan2Print._https._tcp.local.",
                            addresses=[socket.inet_aton(ip)], port=port, server="scan2print.local.")
-        zc = Zeroconf()
-        zc.register_service(info)
+        azc = AsyncZeroconf()
+        await asyncio.wait_for(azc.async_register_service(info), 5)
+        state["azc"], state["info"] = azc, info
     except Exception:
-        zc = None
+        pass  # el anuncio es opcional
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    state: dict = {}
+    task = asyncio.create_task(_announce(state))
     yield
-    if zc:
-        zc.unregister_service(info)
-        zc.close()
+    task.cancel()
+    if "azc" in state:
+        await state["azc"].async_unregister_service(state["info"])
+        await state["azc"].async_close()
 
 
 app = FastAPI(title="Scan2Print", lifespan=lifespan)
@@ -93,11 +101,11 @@ async def create_job(
     d.mkdir(parents=True)
     saved = []
     for i, f in enumerate(files):
-        name = SAFE_NAME.sub("_", Path(f.filename or f"file{i}").name)
+        fname = SAFE_NAME.sub("_", Path(f.filename or f"file{i}").name)
         if labels:
-            name = f"{labels[i]}_{name}"
-        (d / name).write_bytes(await f.read())
-        saved.append(name)
+            fname = f"{labels[i]}_{fname}"
+        (d / fname).write_bytes(await f.read())
+        saved.append(fname)
 
     job = {
         "id": job_id,

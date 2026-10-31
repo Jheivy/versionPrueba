@@ -75,3 +75,15 @@ docs/  (guía de captura, instalación en el Mac)
 - `pytest server/tests`: imágenes sintéticas renderizadas de un .scad conocido (cubo con agujero, pieza en L) → reconstrucción y comparación de dimensiones (bbox, volumen con trimesh, tolerancia ±0.5 mm).
 - `openscad` genera STL sin errores y `trimesh.is_watertight`.
 - E2E: desde el Android en la misma Wi-Fi abrir `https://scan2print.local`, instalar PWA, fotografiar una pieza real medida con calibre, imprimir y comparar.
+
+
+---
+
+## Rediseño de la interfaz (v0.2)
+- **Principios:** una acción primaria por pantalla · mostrar el siguiente paso, no solo el estado · medidas siempre en mm · pulgar (acciones abajo) · funciona sin visor 3D (CDN caído).
+- **Navegación:** barra inferior (Capturar · Trabajos · Ajustes), router por hash (`#/trabajos/<id>`).
+- **Captura:** selector de método con ayuda; cámara guiada con `/api/detect` cada ~700 ms (hoja ≥ 2 marcadores, nitidez, luz) y botón de disparo activo solo en verde; alternativa de galería/cámara nativa.
+- **Revisión de contornos:** el trabajo se pausa en `review` y muestra el contorno (azul) y los huecos (naranja) detectados; se puede repetir una foto concreta (`POST /api/jobs/{id}/inputs`) o continuar (`/confirm`).
+- **Progreso:** campo `step` en `job.json` (`rectifying → contours → modeling → exporting`; vídeo: `frames → reconstruction → cleaning → exporting`).
+- **Errores:** mensajes que dicen qué foto falló y cómo repetirla (`error_view`).
+- **Sistema visual:** tokens CSS claro/oscuro, acento único, objetivos táctiles ≥ 48 px, `prefers-reduced-motion`.

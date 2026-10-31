@@ -20,6 +20,8 @@ def analyze(image: np.ndarray) -> dict:
     _, ids, _ = det.detectMarkers(small)
     known = marker_corners_mm()
     markers = sorted({int(i) for i in (ids.flatten() if ids is not None else []) if int(i) in known})
+    checks = {"hoja": len(markers) >= 2, "nitidez": sharp >= MIN_SHARPNESS,
+              "luz": MIN_BRIGHTNESS <= bright <= MAX_BRIGHTNESS}
     if len(markers) < 2:
         hint = "No veo la hoja: encuádrala entera"
     elif sharp < MIN_SHARPNESS:
@@ -31,4 +33,4 @@ def analyze(image: np.ndarray) -> dict:
     else:
         hint = "Listo para disparar"
     return {"markers": len(markers), "sharpness": round(sharp, 1), "brightness": round(bright, 1),
-            "ok": hint == "Listo para disparar", "hint": hint}
+            "ok": hint == "Listo para disparar", "hint": hint, "checks": checks}
