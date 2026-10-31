@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import json
+import math
 import os
+import re
 import shutil
 import subprocess
 import urllib.request
@@ -13,6 +15,7 @@ import cv2
 
 from . import jobs
 from .views.contours import NoShapeFound, extract
+from .views.holes import finalize, split_circles
 from .views.rectify import MarkersNotFound, rectify
 from .views.scad_writer import build_scad
 
@@ -20,6 +23,7 @@ PX = 10.0
 OUT_DIR = Path(os.environ.get("SCAN2PRINT_OUT", Path.home() / "Scan2Print" / "out"))
 WEBHOOK = os.environ.get("SCAN2PRINT_WEBHOOK")  # URL que recibe un POST JSON al terminar
 PARAM_KEYS = ("ancho", "fondo", "alto", "holgura")  # cotas objetivo (mm) y holgura
+HOLE_KEY = re.compile(r"d_(planta|alzado|perfil)_(\d+)")  # Ø medido de un agujero, p. ej. d_planta_1
 
 
 def _set(d: Path, **kw):
@@ -72,6 +76,11 @@ def _scale(contours, sx, sy):
     return [[(x * sx, y * sy) for x, y in c] for c in contours]
 
 
+def _scale_circles(circles, sx, sy):
+    # el contorno pasa por los píxeles del borde del material: el hueco sale ~1 píxel (0,1 mm) más grande
+    return [(cx * sx, cy * sy, (d - 1 / PX) * math.sqrt(sx * sy)) for cx, cy, d in circles]
+
+
 def _dims(views, altura=None):
     ancho, fondo = (max(p[i] for c in views["planta"] for p in c) for i in (0, 1))
     other = views.get("alzado") or views.get("perfil")
@@ -84,9 +93,10 @@ def process_views(d: Path, params: dict | None = None, pause_for_review: bool = 
     con calibre, mm; reescalan la pieza) y holgura (offset de contorno, mm)."""
     with jobs.running(d):
         try:
-            params = {k: float(v) for k, v in (params or {}).items() if k in PARAM_KEYS and v not in (None, "")}
+            params = {k: float(v) for k, v in (params or {}).items()
+                      if (k in PARAM_KEYS or HOLE_KEY.fullmatch(k)) and v not in (None, "")}
             _set(d, status="processing", error=None, error_view=None)
-            views = {}
+            views, circles = {}, {}
             for p in sorted((d / "input").iterdir()):
                 name = p.name.split("_", 1)[0]
                 if name in ("planta", "alzado", "perfil"):
@@ -101,7 +111,7 @@ def process_views(d: Path, params: dict | None = None, pause_for_review: bool = 
                                               "Encuádrala entera y con buena luz.")
                     _step(d, "contours")
                     try:
-                        views[name] = extract(sheet, PX)
+                        views[name], circles[name] = split_circles(extract(sheet, PX))
                     except NoShapeFound:
                         raise ViewError(name, f"No encontré la pieza en la foto de {name}. "
                                               "Colócala sobre la hoja con fondo claro.")
@@ -122,11 +132,21 @@ def process_views(d: Path, params: dict | None = None, pause_for_review: bool = 
             if "perfil" in views:
                 views["perfil"] = _scale(views["perfil"], k["fondo"], k["alto"])
             altura = detected["alto"] * k["alto"]
+            axes = {"planta": (k["ancho"], k["fondo"]), "alzado": (k["ancho"], k["alto"]),
+                    "perfil": (k["fondo"], k["alto"])}
+            final, holes = {}, []
+            for view, cs in circles.items():
+                final[view] = []
+                for n, (cx, cy, dm) in enumerate(_scale_circles(cs, *axes[view]), 1):
+                    measured = params.get(f"d_{view}_{n}")
+                    diam, std = finalize(measured if measured else dm)
+                    final[view].append((cx, cy, diam, std))
+                    holes.append({"view": view, "n": n, "diam": diam, "x": round(cx, 2), "y": round(cy, 2), "std": std})
 
             out = d / "output"
             out.mkdir(exist_ok=True)
             scad = build_scad(views["planta"], views.get("alzado"), views.get("perfil"),
-                              holgura=params.get("holgura", 0.0), altura=altura)
+                              holgura=params.get("holgura", 0.0), altura=altura, circles=final)
             (out / "pieza.scad").write_text(scad)
             outputs = ["pieza.scad"]
             (out / "pieza.stl").unlink(missing_ok=True)
@@ -138,7 +158,7 @@ def process_views(d: Path, params: dict | None = None, pause_for_review: bool = 
             dims = {a: detected[a] * k[a] for a in k}
             exported = _export(d, d.name)
             _set(d, status="done", step=None, outputs=outputs, detected=detected, params=params,
-                 dims=dims, exported=exported)
+                 dims=dims, holes=holes, exported=exported)
             _notify({"event": "job.done", "id": d.name, "dims": dims, "files": exported})
         except ViewError as e:
             _set(d, status="error", step=None, error=str(e), error_view=e.view)

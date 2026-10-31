@@ -7,6 +7,7 @@ const STEPS = {
   video: [["uploaded", "Subida"], ["frames", "Eligiendo fotogramas"], ["reconstruction", "Reconstruyendo en 3D"], ["cleaning", "Limpiando la malla"], ["exporting", "Exportando STL"]],
 };
 const VIEW_LABEL = { planta: "Planta", alzado: "Alzado", perfil: "Perfil" };
+const holeName = (x) => `Ø${fmt(x.diam)} mm · ${VIEW_LABEL[x.view].toLowerCase()} ${x.n}`;
 const mmss = (ms) => { const s = Math.max(0, Math.round(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };
 
 export function detalle(root, { id }) {
@@ -112,6 +113,9 @@ export function detalle(root, { id }) {
       hasStl ? h("div", { class: "viewer" }, canvas, fb, tools) : h("div", { class: "banner" }, icon("alert"), "OpenSCAD no está instalado en el Mac, así que no se generó el STL. Descarga el .scad o instala OpenSCAD."),
       h("div", { class: "dims" }, h("div", {}, h("strong", { class: "num" }, fmtDims(j.dims)), h("div", { class: "muted small" }, "Ancho × fondo × alto")),
         h("span", { class: "chip ok" }, icon("check"), "Listo")),
+      j.holes?.length > 0 && h("div", { class: "holes", "aria-label": "Agujeros detectados" },
+        h("div", { class: "muted small" }, `${j.holes.length} ${j.holes.length === 1 ? "agujero detectado" : "agujeros detectados"}`),
+        h("div", { class: "chips" }, j.holes.map((x) => h("span", { class: "chip" }, holeName(x), x.std && h("span", { class: "muted" }, ` · posible ${x.std}`))))),
       j.mesh?.scale_estimated && h("div", { class: "banner info" }, icon("ruler"), h("div", {}, "Escala estimada. Mide la dimensión más larga con un calibre e indícala para ajustar el tamaño real. ",
         h("button", { class: "btn", style: "margin-top:8px", onclick: openAdjust }, "Indicar medida"))),
       j.mesh && !j.mesh.watertight && h("div", { class: "banner" }, icon("alert"), "La malla tiene pequeños huecos. Orca suele repararlos al importar."),
@@ -145,10 +149,11 @@ export function detalle(root, { id }) {
            h("label", { class: "field" }, "Detalle de la reconstrucción", h("select", { name: "detalle" },
              [["medium", "Medio"], ["full", "Alto (más lento)"], ["reduced", "Bajo (rápido)"]].map(([v, t]) => h("option", { value: v, selected: (p.detalle || "medium") === v }, t))))]
         : [h("div", { class: "field-grid" }, num("ancho", "Ancho X", fmt(det.ancho ?? 0)), num("fondo", "Fondo Y", fmt(det.fondo ?? 0)), num("alto", "Alto Z", fmt(det.alto ?? 0))),
+           ...(j.holes || []).map((x) => num(`d_${x.view}_${x.n}`, `Ø agujero (${VIEW_LABEL[x.view].toLowerCase()} ${x.n})`, fmt(x.diam), "0.05")),
            h("div", { class: "field" }, "Holgura (mm)", h("div", { class: "stepper" },
              h("button", { type: "button", class: "btn", "aria-label": "Menos", onclick: () => bump(-0.05) }, "−"), holgura,
              h("button", { type: "button", class: "btn", "aria-label": "Más", onclick: () => bump(0.05) }, "+")), presets)],
-      h("p", { class: "muted small", style: "margin:0" }, "Deja vacío lo que no hayas medido."),
+      h("p", { class: "muted small", style: "margin:0" }, j.holes?.length ? "Deja vacío lo que no hayas medido. Mide los agujeros con calibre: la foto tiene ±0,1 mm de error." : "Deja vacío lo que no hayas medido."),
       h("button", { class: "btn btn-primary btn-block", type: "submit" }, "Regenerar"));
     const close = openSheet(j.mode === "video" ? "Escala real" : "Medidas con calibre", form);
   }

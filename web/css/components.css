@@ -88,7 +88,7 @@ input[type=number], input[type=text], select {
 .viewer .fallback { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; padding: 24px; color: var(--muted); }
 .dims { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 12px 4px; }
 .dims strong { font-size: 1.35rem; }
-.actionbar { position: sticky; bottom: calc(var(--tab-h) + env(safe-area-inset-bottom)); display: grid; grid-template-columns: auto 1fr; gap: 8px; padding: 12px 0; background: linear-gradient(transparent, var(--bg) 30%); }
+.actionbar { position: sticky; bottom: calc(var(--tab-h) + env(safe-area-inset-bottom)); display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px; padding: 12px 0; background: linear-gradient(transparent, var(--bg) 30%); }
 .review img { width: 100%; border-radius: var(--r-s); background: #fff; border: 1px solid var(--line); display: block; }
 
 /* Cámara */
@@ -129,3 +129,5 @@ input[type=number], input[type=text], select {
 .actionbar .btn { white-space: nowrap; }
 .cam .sum { position: absolute; inset: 0; z-index: 3; overflow: auto; background: var(--bg); color: var(--fg); padding: 16px calc(16px + env(safe-area-inset-right)) calc(16px + env(safe-area-inset-bottom)) 16px; }
 .cam .sum .icon-btn { background: transparent; color: var(--fg); }
+.holes .chips { flex-wrap: wrap; overflow: visible; padding-bottom: 0; }
+.holes .chip { white-space: normal; }

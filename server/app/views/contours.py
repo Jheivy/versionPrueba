@@ -38,8 +38,9 @@ def extract(sheet: np.ndarray, px_per_mm: float = 10.0, min_area_mm2: float = 25
     holes = [i for i, h in enumerate(hier) if h[3] == best and cv2.contourArea(found[i]) / px2 >= 4.0]
 
     polys = []
-    for i in [best] + holes:
-        ap = cv2.approxPolyDP(found[i], epsilon_mm * px_per_mm, True).reshape(-1, 2) / px_per_mm
+    for k, i in enumerate([best] + holes):
+        eps = epsilon_mm if k == 0 else epsilon_mm * 0.4  # huecos más finos: así los círculos se reconocen
+        ap = cv2.approxPolyDP(found[i], eps * px_per_mm, True).reshape(-1, 2) / px_per_mm
         polys.append(ap)
     x0, y1 = polys[0][:, 0].min(), polys[0][:, 1].max()
     out = [[(float(x - x0), float(y1 - y)) for x, y in p] for p in polys]
