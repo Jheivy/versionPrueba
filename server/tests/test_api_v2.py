@@ -33,8 +33,10 @@ def c(tmp_path, monkeypatch):
 
 def test_detect_sheet_and_blank(c):
     r = c.post("/api/detect", files={"file": ("f.jpg", enc(photo(SHEET, [])), "image/jpeg")}).json()
-    assert r["markers"] == 4 and r["ok"] is True and r["checks"] == {"hoja": True, "nitidez": True, "luz": True} and r["hint"] == "Listo para disparar"
-    blank = c.post("/api/detect", files={"file": ("f.jpg", enc(np.full((600, 800, 3), 128, np.uint8)), "image/jpeg")}).json()
+    assert r["markers"] == 4 and r["ok"] is True and r["hint"] == "Listo para disparar"
+    assert r["checks"] == {"hoja": True, "nitidez": True, "luz": True}
+    gray = enc(np.full((600, 800, 3), 128, np.uint8))
+    blank = c.post("/api/detect", files={"file": ("f.jpg", gray, "image/jpeg")}).json()
     assert blank["markers"] == 0 and not blank["ok"] and "hoja" in blank["hint"]
     assert c.post("/api/detect", files={"file": ("f.jpg", b"xx", "image/jpeg")}).status_code == 400
 
@@ -48,7 +50,8 @@ def test_health_and_sheet_pdf(c):
 
 def test_review_flow(c):
     _, files = L_files()
-    job = c.post("/api/jobs", data={"mode": "views", "views": "planta,alzado,perfil", "review": "1"}, files=files).json()
+    data = {"mode": "views", "views": "planta,alzado,perfil", "review": "1"}
+    job = c.post("/api/jobs", data=data, files=files).json()
     jid = job["id"]
     j = c.get(f"/api/jobs/{jid}").json()
     assert j["status"] == "review" and j["step"] == "review" and j["outputs"] == []
@@ -79,7 +82,8 @@ def test_friendly_error_and_replace_view(c):
 
 def test_rename_thumb_delete(c):
     _, files = L_files()
-    jid = c.post("/api/jobs", data={"mode": "views", "views": "planta,alzado,perfil", "name": "Tapa"}, files=files).json()["id"]
+    data = {"mode": "views", "views": "planta,alzado,perfil", "name": "Tapa"}
+    jid = c.post("/api/jobs", data=data, files=files).json()["id"]
     assert c.get(f"/api/jobs/{jid}").json()["name"] == "Tapa"  # no lo pisa el nombre del último fichero
     assert c.patch(f"/api/jobs/{jid}", json={"name": "Tapa batería"}).json()["name"] == "Tapa batería"
     assert c.get(f"/api/jobs/{jid}/thumb.jpg").content[:2] == b"\xff\xd8"
