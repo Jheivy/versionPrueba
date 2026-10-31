@@ -15,6 +15,7 @@ export async function go() {
   const root = document.getElementById("view");
   cleanup?.();
   cleanup = null;
+  for (const m of document.querySelectorAll(".backdrop")) m.remove(); // cierra hojas modales abiertas
   for (const r of routes) {
     const m = r.re.exec(path);
     if (!m) continue;

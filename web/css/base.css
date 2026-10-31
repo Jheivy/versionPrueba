@@ -15,6 +15,7 @@ a { color: var(--accent); }
 .small { font-size: .875rem; }
 .num { font-variant-numeric: tabular-nums; }
 .stack { display: grid; gap: 12px; }
+.stack > * { min-width: 0; }  /* evita que un hijo ancho ensanche el grid */
 .row { display: flex; gap: 8px; align-items: center; }
 .row > .grow { flex: 1; min-width: 0; }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }

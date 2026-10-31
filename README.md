@@ -16,6 +16,17 @@ Tres pestañas — **Capturar · Trabajos · Ajustes** —, cámara guiada con s
 - [x] Hito 5: arranque con launchd, mDNS (`scan2print.local`), carpeta de salida y webhook
 - [x] Hito 6: vídeo → malla con Object Capture (**pendiente de probar en el Mac**, ver abajo)
 
+## Agujeros paramétricos
+Los agujeros circulares se detectan en cada vista y se escriben en el `.scad` como parámetros editables:
+```
+diam_agujero_planta_1 = 3.200;  // posible M3 (paso medio)
+pos_agujero_planta_1 = [12.300, 8.100];
+```
+- En la app aparecen como chips («Ø3,2 mm · planta 1 · posible M3») y se corrige cada Ø con el calibre en *Ajustar medidas*.
+- La etiqueta métrica es solo una **sugerencia**: la medida fotográfica tiene ±0,1 mm de error y no se ajusta sola.
+- Los huecos que no son círculos (cuadrados, hexágonos, ranuras) y los de Ø < ~2,5 mm se mantienen como polígono.
+- El contorno pasa por los píxeles del borde del material, así que el Ø se corrige 1 píxel (0,1 mm); el error en pruebas sintéticas es ≤ 0,1 mm.
+
 ## Arranque en el Mac
 ```bash
 brew install openscad mkcert && mkcert -install
