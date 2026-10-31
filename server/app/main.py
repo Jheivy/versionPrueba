@@ -1,6 +1,7 @@
 """Scan2Print hub: recibe fotos desde el móvil y gestiona trabajos de reconstrucción."""
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 import json
 import os
 import re
@@ -20,7 +21,29 @@ MODES = {"views", "video"}
 VIEW_NAMES = {"planta", "alzado", "perfil"}
 SAFE_NAME = re.compile(r"[^A-Za-z0-9._-]")
 
-app = FastAPI(title="Scan2Print")
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    """Anuncia scan2print.local por mDNS si `zeroconf` está instalado."""
+    zc = info = None
+    try:
+        import socket
+
+        from zeroconf import ServiceInfo, Zeroconf
+        port = int(os.environ.get("SCAN2PRINT_PORT", 8443))
+        ip = socket.gethostbyname(socket.gethostname())
+        info = ServiceInfo("_https._tcp.local.", "Scan2Print._https._tcp.local.",
+                           addresses=[socket.inet_aton(ip)], port=port, server="scan2print.local.")
+        zc = Zeroconf()
+        zc.register_service(info)
+    except Exception:
+        zc = None
+    yield
+    if zc:
+        zc.unregister_service(info)
+        zc.close()
+
+
+app = FastAPI(title="Scan2Print", lifespan=lifespan)
 
 
 def _job_dir(job_id: str) -> Path:

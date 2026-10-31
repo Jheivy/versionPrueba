@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>com.scan2print</string>
+  <key>ProgramArguments</key><array><string>REPO_PATH/deploy/run.sh</string></array>
+  <key>EnvironmentVariables</key><dict>
+    <key>PATH</key><string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+    <!-- <key>SCAN2PRINT_WEBHOOK</key><string>http://localhost:3000/hooks/scan2print</string> -->
+  </dict>
+  <key>RunAtLoad</key><true/><key>KeepAlive</key><true/>
+  <key>StandardErrorPath</key><string>/tmp/scan2print.log</string>
+  <key>StandardOutPath</key><string>/tmp/scan2print.log</string>
+</dict></plist>

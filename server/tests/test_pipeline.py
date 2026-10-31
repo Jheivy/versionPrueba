@@ -71,3 +71,18 @@ def test_params_rescale_and_holgura(tmp_path, monkeypatch):
     c.post(f"/api/jobs/{jid}/params", json={"holgura": 0.5})
     m = trimesh.load(tmp_path / jid / "output" / "pieza.stl")
     assert m.extents[0] == pytest.approx(41, abs=1.2)  # +0,5 por cada lado
+
+
+def test_export_and_webhook(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from app import main, pipeline
+    sent = []
+    monkeypatch.setattr(main, "STORAGE", tmp_path / "jobs")
+    monkeypatch.setattr(pipeline, "OUT_DIR", tmp_path / "out")
+    monkeypatch.setattr(pipeline, "_notify", sent.append)
+    jid = _upload_L(TestClient(main.app))
+    stl = sorted((tmp_path / "out").glob("*.stl"))
+    assert len(stl) == 1 and jid[:8] in stl[0].name
+    assert (stl[0].with_suffix(".scad")).exists()
+    assert sent[0]["event"] == "job.done" and sent[0]["files"]["stl"] == str(stl[0])

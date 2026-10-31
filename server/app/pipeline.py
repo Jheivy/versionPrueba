@@ -2,8 +2,11 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
+import urllib.request
+from datetime import datetime
 from pathlib import Path
 
 import cv2
@@ -13,6 +16,8 @@ from .views.rectify import rectify
 from .views.scad_writer import build_scad
 
 PX = 10.0
+OUT_DIR = Path(os.environ.get("SCAN2PRINT_OUT", Path.home() / "Scan2Print" / "out"))
+WEBHOOK = os.environ.get("SCAN2PRINT_WEBHOOK")  # URL que recibe un POST JSON al terminar
 PARAM_KEYS = ("ancho", "fondo", "alto", "holgura")  # cotas objetivo (mm) y holgura
 
 
@@ -20,6 +25,29 @@ def _set(d: Path, **kw):
     job = json.loads((d / "job.json").read_text())
     job.update(kw)
     (d / "job.json").write_text(json.dumps(job, indent=2))
+
+
+def _export(d: Path, job_id: str) -> dict:
+    """Copia el resultado a OUT_DIR con nombre estable (para Orca o tus agentes)."""
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    base = f"{datetime.now():%Y%m%d-%H%M%S}_{job_id[:8]}"
+    files = {}
+    for ext in ("stl", "scad"):
+        src = d / "output" / f"pieza.{ext}"
+        if src.exists():
+            files[ext] = str(shutil.copy(src, OUT_DIR / f"{base}.{ext}"))
+    return files
+
+
+def _notify(payload: dict) -> None:
+    if not WEBHOOK:
+        return
+    try:
+        req = urllib.request.Request(WEBHOOK, json.dumps(payload).encode(),
+                                     {"Content-Type": "application/json"})
+        urllib.request.urlopen(req, timeout=5).close()
+    except Exception:
+        pass  # el aviso es opcional; nunca rompe el trabajo
 
 
 def _scale(contours, sx, sy):
@@ -72,7 +100,10 @@ def process_views(d: Path, params: dict | None = None) -> None:
             subprocess.run(["openscad", "-q", "-o", str(out / "pieza.stl"), str(out / "pieza.scad")],
                            check=True, capture_output=True, timeout=300)
             outputs.append("pieza.stl")
+        dims = {a: detected[a] * k[a] for a in k}
+        exported = _export(d, d.name)
         _set(d, status="done", outputs=outputs, detected=detected, params=params,
-             dims={a: detected[a] * k[a] for a in k})
+             dims=dims, exported=exported)
+        _notify({"event": "job.done", "id": d.name, "dims": dims, "files": exported})
     except Exception as e:  # el estado de error se muestra en la app
         _set(d, status="error", error=str(e))

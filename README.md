@@ -10,7 +10,8 @@ Diseño completo y hoja de ruta: [docs/DISENO.md](docs/DISENO.md).
 - [x] Hito 2: hoja de marcadores ArUco (`tools/marker_sheet.py`) + rectificación a mm (`rectify.py`)
 - [x] Hito 3: contornos → `.scad` → `.stl` automático al subir (`pipeline.py`)
 - [x] Hito 4: visor 3D (three.js) y cotas de calibre + holgura con regeneración
-- [ ] Hitos 5–6: launchd/mDNS + carpeta del slicer, fotogrametría
+- [x] Hito 5: arranque con launchd, mDNS (`scan2print.local`), carpeta de salida y webhook
+- [ ] Hito 6: fotogrametría (vídeo → malla)
 
 ## Arranque en el Mac
 ```bash
@@ -23,6 +24,15 @@ En el Android (misma Wi-Fi): abre `https://<nombre-del-mac>.local:8443` → men�
 Para que Android confíe en el certificado, instala la CA de `mkcert -CAROOT` (`rootCA.pem`) en Ajustes → Seguridad → Certificados.
 
 Los trabajos se guardan en `~/Scan2Print/jobs/` (configurable con `SCAN2PRINT_STORAGE`).
+
+## Arranque automático y salida (Orca / tu página de impresión)
+```bash
+sed "s#REPO_PATH#$PWD#" deploy/com.scan2print.plist > ~/Library/LaunchAgents/com.scan2print.plist
+launchctl load ~/Library/LaunchAgents/com.scan2print.plist
+```
+- Cada trabajo terminado copia `AAAAMMDD-HHMMSS_<id>.stl/.scad` a `~/Scan2Print/out/` (`SCAN2PRINT_OUT`): abre ahí con Orca o vigila la carpeta desde tus agentes.
+- `SCAN2PRINT_WEBHOOK=<url>`: POST JSON `{"event":"job.done","id","dims":{ancho,fondo,alto},"files":{stl,scad}}` al terminar.
+- API estable para tu página: `GET /api/jobs`, `GET /api/jobs/{id}`, `GET /api/jobs/{id}/files/pieza.stl`, `POST /api/jobs/{id}/params`.
 
 ## Tests
 ```bash

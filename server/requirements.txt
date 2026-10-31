@@ -7,4 +7,4 @@ numpy
 pillow
 trimesh
 # shapely
-# zeroconf
+zeroconf
