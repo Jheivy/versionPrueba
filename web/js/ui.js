@@ -1,3 +1,5 @@
+import { pref } from "./api.js";
+
 const I = {
   camera: '<svg viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>',
   list: '<svg viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg>',
@@ -21,6 +23,26 @@ const I = {
   file: '<svg viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/></svg>',
 };
 
+/* ---------- Hápticos y movimiento ---------- */
+const HAPTICS = { tick: 8, tap: 14, success: [14, 50, 22], warn: [24, 60, 24], error: [40, 50, 40] };
+export function haptic(kind = "tap") {
+  if (!pref("haptics", true)) return;
+  try { navigator.vibrate?.(HAPTICS[kind]); } catch { /* sin vibración */ }
+}
+export const reducedMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+/** Anima un valor: `render(e)` recibe 0..1 (con easing) y devuelve el texto. */
+export function animateValue(el, render, ms = 650) {
+  if (reducedMotion()) { el.textContent = render(1); return; }
+  const t0 = performance.now();
+  const step = (now) => {
+    const t = Math.min(1, (now - t0) / ms);
+    el.textContent = render(1 - (1 - t) ** 3);
+    if (t < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+
 export const icon = (name) => h("span", { class: "icon", "aria-hidden": "true", html: I[name] || "" });
 export const iconHTML = (name) => I[name] || "";
 
@@ -42,19 +64,49 @@ export function h(tag, props = {}, ...kids) {
 export function toast(msg, { kind = "", action, onAction } = {}) {
   const box = document.getElementById("toasts");
   const t = h("div", { class: "toast " + kind, role: kind === "err" ? "alert" : "status" }, h("span", {}, msg));
-  if (action) t.append(h("button", { onclick: () => { t.remove(); onAction?.(); } }, action));
+  const dismiss = () => { t.classList.add("out"); setTimeout(() => t.remove(), 220); };
+  if (action) t.append(h("button", { onclick: () => { dismiss(); onAction?.(); } }, action));
+  if (kind === "err") haptic("error");
   box.append(t);
-  setTimeout(() => t.remove(), action ? 8000 : 4000);
+  setTimeout(dismiss, action ? 8000 : 3600);
 }
 
-/** Hoja inferior modal. Devuelve close(). */
+/** Hoja inferior modal. Se cierra con Esc, tocando fuera o arrastrándola hacia abajo. Devuelve close(). */
 export function openSheet(title, ...content) {
   const prev = document.activeElement;
-  const close = () => { back.remove(); document.removeEventListener("keydown", onKey); prev?.focus?.(); };
+  let closed = false;
+  const close = () => {
+    if (closed) return;
+    closed = true;
+    document.removeEventListener("keydown", onKey);
+    back.classList.add("out");
+    sheet.style.transform = "translateY(100%)";
+    setTimeout(() => back.remove(), 200);
+    prev?.focus?.();
+  };
   const onKey = (e) => e.key === "Escape" && close();
+  const grab = h("div", { class: "grab", "aria-hidden": "true" });
   const sheet = h("div", { class: "sheet", role: "dialog", "aria-modal": "true", "aria-label": title, tabIndex: -1 },
-    h("h2", {}, title), ...content);
+    grab, h("h2", {}, title), ...content);
   const back = h("div", { class: "backdrop", onclick: (e) => e.target === back && close() }, sheet);
+  let y0 = 0, dy = 0, t0 = 0, drag = false;
+  grab.addEventListener("pointerdown", (e) => { drag = true; y0 = e.clientY; t0 = e.timeStamp; sheet.classList.add("dragging"); grab.setPointerCapture(e.pointerId); });
+  grab.addEventListener("pointermove", (e) => {
+    if (!drag) return;
+    dy = Math.max(0, e.clientY - y0);
+    sheet.style.transform = `translateY(${dy}px)`;
+    back.style.opacity = String(1 - Math.min(dy / 320, 0.85));
+  });
+  const end = (e) => {
+    if (!drag) return;
+    drag = false;
+    sheet.classList.remove("dragging");
+    if (dy > 110 || dy / Math.max(e.timeStamp - t0, 1) > 0.6) { haptic("tick"); close(); }
+    else { sheet.style.transform = ""; back.style.opacity = ""; }
+    dy = 0;
+  };
+  grab.addEventListener("pointerup", end);
+  grab.addEventListener("pointercancel", end);
   document.body.append(back);
   document.addEventListener("keydown", onKey);
   sheet.focus();
@@ -100,3 +152,70 @@ export const pickFile = (accept, capture = false) => new Promise((resolve) => {
   i.addEventListener("cancel", () => resolve(null));
   i.click();
 });
+
+/* ---------- Gestos ---------- */
+
+/** Desliza una tarjeta hacia la izquierda para descubrir la acción de borrar.
+ *  `onCommit(reset)` se llama al soltar pasado el umbral; `reset()` devuelve la tarjeta a su sitio. */
+export function swipeToDelete(wrap, card, onCommit) {
+  const TH = 96;
+  let x0 = 0, y0 = 0, dx = 0, active = false, locked = false, crossed = false, suppress = false;
+  const reset = () => { card.style.transform = ""; wrap.classList.remove("reveal"); };
+  card.addEventListener("pointerdown", (e) => {
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    x0 = e.clientX; y0 = e.clientY; dx = 0; active = true; locked = false; crossed = false;
+  });
+  card.addEventListener("pointermove", (e) => {
+    if (!active) return;
+    const mx = e.clientX - x0, my = e.clientY - y0;
+    if (!locked) {
+      if (Math.abs(mx) > 8 && Math.abs(mx) > Math.abs(my) * 1.4) { locked = true; card.classList.add("dragging"); wrap.classList.add("reveal"); card.setPointerCapture(e.pointerId); }
+      else if (Math.abs(my) > 10) { active = false; return; }
+      else return;
+    }
+    dx = Math.min(0, mx);
+    card.style.transform = `translateX(${dx < -TH ? -TH + (dx + TH) * 0.35 : dx}px)`;
+    if (!crossed && dx < -TH) { crossed = true; haptic("tick"); }
+    if (crossed && dx > -TH) crossed = false;
+  });
+  const end = () => {
+    if (!active) return;
+    active = false;
+    card.classList.remove("dragging");
+    if (locked) { suppress = true; setTimeout(() => { suppress = false; }, 60); }
+    if (locked && dx < -TH) { card.style.transform = `translateX(${-TH}px)`; onCommit(reset); } else reset();
+    locked = false;
+  };
+  card.addEventListener("pointerup", end);
+  card.addEventListener("pointercancel", end);
+  card.addEventListener("click", (e) => { if (suppress) { e.preventDefault(); e.stopPropagation(); } }, true);
+  wrap.querySelector(".swipe-action")?.addEventListener("click", () => onCommit(reset));
+}
+
+/** Tirar hacia abajo desde arriba del todo para actualizar. `indicator` es un elemento `.ptr`. Devuelve un limpiador. */
+export function pullToRefresh(indicator, onRefresh) {
+  let y0 = 0, dy = 0, on = false, busy = false;
+  const spinner = indicator.firstElementChild;
+  const ts = (e) => { if (busy || scrollY > 0 || e.touches.length !== 1) return; y0 = e.touches[0].clientY; on = true; dy = 0; };
+  const tm = (e) => {
+    if (!on) return;
+    dy = e.touches[0].clientY - y0;
+    if (dy <= 0) { indicator.style.height = "0"; return; }
+    indicator.style.transition = "none";
+    indicator.style.height = `${Math.min(dy * 0.45, 64)}px`;
+    spinner.style.transform = `rotate(${Math.min(dy * 2, 240)}deg)`;
+  };
+  const te = async () => {
+    if (!on) return;
+    on = false;
+    indicator.style.transition = "";
+    if (dy > 110 && !busy) {
+      busy = true; indicator.classList.add("loading"); indicator.style.height = "52px"; haptic("tick");
+      try { await onRefresh(); } finally { busy = false; indicator.classList.remove("loading"); indicator.style.height = "0"; spinner.style.transform = ""; }
+    } else { indicator.style.height = "0"; }
+  };
+  addEventListener("touchstart", ts, { passive: true });
+  addEventListener("touchmove", tm, { passive: true });
+  addEventListener("touchend", te);
+  return () => { removeEventListener("touchstart", ts); removeEventListener("touchmove", tm); removeEventListener("touchend", te); };
+}

@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 from . import jobs
@@ -84,7 +85,7 @@ def process_video(d: Path, params: dict | None = None) -> None:
             exported = _export(d, d.name)
             kept = {k: v for k, v in params.items() if k in ("largo", "detalle")}
             mesh = {k: info[k] for k in ("watertight", "triangles", "scale_estimated")}
-            _set(d, status="done", step=None, outputs=["pieza.stl"], params=kept,
+            _set(d, status="done", rev=time.time_ns() // 1_000_000, step=None, outputs=["pieza.stl"], params=kept,
                  dims=dims, mesh=mesh, exported=exported)
             _notify({"event": "job.done", "id": d.name, "dims": dims, "files": exported})
         except Exception as e:

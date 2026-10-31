@@ -50,6 +50,25 @@ extrusiones, así que se recorta a la vista más pequeña y las medidas mostrada
 - O repetir la foto que falle desde la revisión.
 - `job.json` incluye `warnings` (`dim`, `views`, `values`, `diff`); vacío cuando todo cuadra.
 
+## Diseño y rendimiento
+**Diseño** (`web/css/`, `web/js/`): sistema de tokens claro/oscuro con acento azul→violeta, tipografía Inter (local),
+barra inferior flotante con pastilla animada, tarjetas con profundidad, esqueletos de carga, transiciones entre
+pantallas (View Transitions API, con el sentido según la navegación), hápticos (ajustable en *Ajustes*) y gestos:
+deslizar una tarjeta para borrarla, arrastrar una hoja inferior para cerrarla y tirar de la lista para actualizar.
+Respeta `prefers-reduced-motion`.
+
+**Velocidad, sin paso de compilación:**
+- three.js (minificado) y la fuente se sirven desde el propio Mac (`web/vendor/`, `web/fonts/`): la app ya no
+  necesita internet. Licencias en `web/vendor/LICENSE-three.txt` y `web/fonts/LICENSE-inter-OFL.txt`.
+- Cada pantalla se carga bajo demanda y, en reposo, las demás se precargan con `modulepreload` (sin ejecutarlas).
+- El servidor comprime (gzip) y cachea: `vendor/` y `fonts/` son inmutables, el resto se revalida con ETag y los
+  modelos `…/pieza.stl?v=<rev>` son inmutables (la revisión cambia al regenerar).
+- El service worker lo **genera el servidor** a partir de los archivos reales (`GET /sw.js`): la versión es un hash del
+  contenido, así no hay listas ni versiones que mantener a mano. La app abre sin red.
+- Las fotos se reducen a ≤ 3000 px en el móvil antes de subirlas (4–8 MB → ~1–2 MB).
+- Medido con un móvil emulado (30 Mbps, 40 ms, CPU 4× más lenta): abrir un modelo pasa de 755 a 652 ms (frío) y de
+  624 a 493 ms (repetido), y deja de descargar 261 kB de internet.
+
 ## Arranque en el Mac
 ```bash
 brew install openscad mkcert && mkcert -install

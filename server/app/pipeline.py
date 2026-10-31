@@ -7,6 +7,7 @@ import os
 import re
 import shutil
 import subprocess
+import time
 import urllib.request
 from datetime import datetime
 from pathlib import Path
@@ -160,7 +161,8 @@ def process_views(d: Path, params: dict | None = None, pause_for_review: bool = 
                 outputs.append("pieza.stl")
             dims = {dim: target.get(dim, detected[dim]) for dim in detected}
             exported = _export(d, d.name)
-            _set(d, status="done", step=None, outputs=outputs, detected=detected, params=params,
+            rev = time.time_ns() // 1_000_000  # nueva revisión: invalida las cachés del navegador
+            _set(d, status="done", rev=rev, step=None, outputs=outputs, detected=detected, params=params,
                  dims=dims, holes=holes, warnings=warnings, exported=exported)
             _notify({"event": "job.done", "id": d.name, "dims": dims, "files": exported})
         except ViewError as e:

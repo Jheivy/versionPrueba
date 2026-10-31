@@ -1,5 +1,6 @@
-import { h, icon, toast, pickFile } from "./ui.js";
+import { h, haptic, icon, pickFile, toast } from "./ui.js";
 import { upload, pref, setPref } from "./api.js";
+import { prepareImage } from "./image.js";
 import { navigate } from "./router.js";
 
 const VIEWS = [
@@ -10,7 +11,7 @@ const VIEWS = [
 
 async function openStream(video) {
   const stream = await navigator.mediaDevices.getUserMedia({
-    video: { facingMode: { ideal: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false });
+    video: { facingMode: { ideal: "environment" }, width: { ideal: 2560 }, height: { ideal: 1440 } }, audio: false });
   video.srcObject = stream;
   await video.play().catch(() => {});
   return stream;
@@ -75,7 +76,8 @@ export function camaraVistas(root) {
     lightsEl.replaceChildren(...(last ? [chip(`Hoja ${last.markers}/4`, last.checks.hoja), chip("Nitidez", last.checks.nitidez), chip("Luz", last.checks.luz)] : []));
   }
 
-  function accept(blob) {
+  async function accept(blob) {
+    blob = await prepareImage(blob);
     shots[VIEWS[step][0]] = blob;
     if (fromSummary || step >= VIEWS.length - 1) { fromSummary = false; return renderSummary(); }
     step++;
@@ -87,7 +89,7 @@ export function camaraVistas(root) {
     c.width = video.videoWidth; c.height = video.videoHeight;
     c.getContext("2d").drawImage(video, 0, 0);
     const blob = await new Promise((r) => c.toBlob(r, "image/jpeg", 0.92));
-    navigator.vibrate?.(30);
+    haptic("tap");
     accept(blob);
   }
 
