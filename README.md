@@ -8,7 +8,7 @@ Diseño completo y hoja de ruta: [docs/DISENO.md](docs/DISENO.md).
 - [x] Hito 1: servidor FastAPI + PWA que sube fotos al Mac
 - [x] Generador `.scad` por intersección de vistas (`server/app/views/scad_writer.py`)
 - [x] Hito 2: hoja de marcadores ArUco (`tools/marker_sheet.py`) + rectificación a mm (`rectify.py`)
-- [ ] Hito 3: contornos desde foto → `.scad` → `.stl`
+- [x] Hito 3: contornos → `.scad` → `.stl` automático al subir (`pipeline.py`)
 - [ ] Hitos 4–6: visor 3D, cotas, launchd/mDNS, fotogrametría
 
 ## Arranque en el Mac

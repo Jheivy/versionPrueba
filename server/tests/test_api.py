@@ -14,7 +14,9 @@ def test_upload_views_job(tmp_path, monkeypatch):
     assert r.status_code == 201
     job = r.json()
     assert job["inputs"] == ["planta_a.jpg", "alzado_b.jpg", "perfil_c.jpg"]
-    assert c.get(f"/api/jobs/{job['id']}").json()["status"] == "uploaded"
+    assert job["status"] == "uploaded"
+    got = c.get(f"/api/jobs/{job['id']}").json()
+    assert got["status"] == "error" and "leer" in got["error"]  # imágenes falsas
     assert [j["id"] for j in c.get("/api/jobs").json()] == [job["id"]]
     assert c.get(f"/api/jobs/{job['id']}/files/planta_a.jpg").content == b"img"
 

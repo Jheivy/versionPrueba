@@ -8,9 +8,11 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+
+from .pipeline import process_views
 
 STORAGE = Path(os.environ.get("SCAN2PRINT_STORAGE", Path.home() / "Scan2Print" / "jobs"))
 WEB_DIR = Path(__file__).resolve().parents[2] / "web"
@@ -36,6 +38,7 @@ def _read_job(d: Path) -> dict:
 
 @app.post("/api/jobs", status_code=201)
 async def create_job(
+    background: BackgroundTasks,
     mode: str = Form(...),
     files: list[UploadFile] = File(...),
     views: str = Form(""),
@@ -69,6 +72,8 @@ async def create_job(
         "outputs": [],
     }
     (STORAGE / job_id / "job.json").write_text(json.dumps(job, indent=2))
+    if mode == "views":
+        background.add_task(process_views, STORAGE / job_id)
     return job
 
 
