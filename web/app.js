@@ -31,6 +31,24 @@ $("views").addEventListener("submit", async (e) => {
   }
 });
 
+$("video").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const fd = new FormData();
+  fd.append("mode", "video");
+  fd.append("files", $("vfile").files[0]);
+  $("vstatus").textContent = "Subiendo…";
+  try {
+    const r = await fetch("/api/jobs", { method: "POST", body: fd });
+    if (!r.ok) throw new Error((await r.json()).detail);
+    $("vstatus").textContent = "Enviado ✔ (la reconstrucción tarda varios minutos)";
+    e.target.reset();
+    await loadJobs();
+    openJob((await (await fetch("/api/jobs")).json())[0].id);
+  } catch (err) {
+    $("vstatus").textContent = "Error: " + err.message;
+  }
+});
+
 async function loadJobs() {
   const jobs = await (await fetch("/api/jobs")).json();
   $("jobs").replaceChildren(...jobs.map((j) => {
@@ -48,13 +66,15 @@ async function openJob(id) {
   clearTimeout(timer);
   const j = await (await fetch(`/api/jobs/${id}`)).json();
   $("detail").hidden = false;
+  for (const el of $("params").querySelectorAll("[data-mode]")) el.hidden = el.dataset.mode !== j.mode;
   $("dtitle").textContent = `Trabajo ${id.slice(0, 8)}`;
   const msg = { done: "Listo ✔", error: "Error: " + j.error, processing: "Procesando…", uploaded: "En cola…" };
   $("dstatus").textContent = msg[j.status] || j.status;
   if (j.status === "uploaded" || j.status === "processing") {
-    timer = setTimeout(() => current === id && openJob(id), 1500);
+    timer = setTimeout(() => current === id && openJob(id), j.mode === "video" ? 5000 : 1500);
     return;
   }
+  if (j.mesh && j.mesh.scale_estimated) $("dstatus").textContent += " · escala estimada: indica la dimensión más larga";
   const d = j.dims;
   $("ddims").textContent = d ? `Medidas actuales: ${d.ancho.toFixed(1)} × ${d.fondo.toFixed(1)} × ${d.alto.toFixed(1)} mm (X × Y × Z)` : "";
   for (const [k, v] of Object.entries(j.params || {})) $("params").elements[k].value = v;

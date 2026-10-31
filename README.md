@@ -11,7 +11,7 @@ Diseño completo y hoja de ruta: [docs/DISENO.md](docs/DISENO.md).
 - [x] Hito 3: contornos → `.scad` → `.stl` automático al subir (`pipeline.py`)
 - [x] Hito 4: visor 3D (three.js) y cotas de calibre + holgura con regeneración
 - [x] Hito 5: arranque con launchd, mDNS (`scan2print.local`), carpeta de salida y webhook
-- [ ] Hito 6: fotogrametría (vídeo → malla)
+- [x] Hito 6: vídeo → malla con Object Capture (**pendiente de probar en el Mac**, ver abajo)
 
 ## Arranque en el Mac
 ```bash
@@ -33,6 +33,21 @@ launchctl load ~/Library/LaunchAgents/com.scan2print.plist
 - Cada trabajo terminado copia `AAAAMMDD-HHMMSS_<id>.stl/.scad` a `~/Scan2Print/out/` (`SCAN2PRINT_OUT`): abre ahí con Orca o vigila la carpeta desde tus agentes.
 - `SCAN2PRINT_WEBHOOK=<url>`: POST JSON `{"event":"job.done","id","dims":{ancho,fondo,alto},"files":{stl,scad}}` al terminar.
 - API estable para tu página: `GET /api/jobs`, `GET /api/jobs/{id}`, `GET /api/jobs/{id}/files/pieza.stl`, `POST /api/jobs/{id}/params`.
+
+## Vídeo → malla (Object Capture) — primer test en el Mac
+```bash
+cd mac/ObjectCaptureCLI && swift build -c release
+export SCAN2PRINT_OBJECT_CAPTURE="$PWD/.build/release/scan2print-object-capture"   # añádelo también al .plist
+# prueba suelta con una carpeta de fotos:
+$SCAN2PRINT_OBJECT_CAPTURE ./fotos ./salida medium && ls salida
+```
+Flujo: vídeo → fotogramas nítidos (`photogrammetry/frames.py`) → CLI → `.obj` → `mesh.py` (mayor fragmento, Y-up→Z-up, m→mm, rellena huecos, apoya en Z=0) → `pieza.stl`.
+La escala de Object Capture es aproximada: indica en la app la **dimensión más larga medida con calibre** y se regenera sin repetir la reconstrucción pesada… (hoy la repite; mejora pendiente).
+
+**Cosas a verificar en el Mac (no se han podido ejecutar aquí):**
+1. Que `swift build` compila (API `PhotogrammetrySession`).
+2. Que con una URL de carpeta `.modelFile` genera `*.obj`. Si solo genera `.usdz`, cambiar `Entry.swift` o convertir con `usdz`→`obj`.
+3. Orientación (Y-up) y que el STL aparece apoyado en Z=0 en Orca.
 
 ## Tests
 ```bash

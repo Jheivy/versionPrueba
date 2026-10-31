@@ -14,6 +14,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from .pipeline import process_views
+from .pipeline_video import process_video
 
 STORAGE = Path(os.environ.get("SCAN2PRINT_STORAGE", Path.home() / "Scan2Print" / "jobs"))
 WEB_DIR = Path(__file__).resolve().parents[2] / "web"
@@ -95,8 +96,7 @@ async def create_job(
         "outputs": [],
     }
     (STORAGE / job_id / "job.json").write_text(json.dumps(job, indent=2))
-    if mode == "views":
-        background.add_task(process_views, STORAGE / job_id)
+    background.add_task(process_views if mode == "views" else process_video, STORAGE / job_id)
     return job
 
 
@@ -115,11 +115,10 @@ def get_job(job_id: str):
 
 @app.post("/api/jobs/{job_id}/params")
 def set_params(job_id: str, background: BackgroundTasks, params: dict = Body(...)):
-    """Cotas medidas con calibre (ancho/fondo/alto, mm) y holgura; regenera la pieza."""
+    """views: ancho/fondo/alto/holgura (mm). video: largo (mm) y detalle. Regenera la pieza."""
     d = _job_dir(job_id)
-    if _read_job(d)["mode"] != "views":
-        raise HTTPException(400, "solo disponible en modo views")
-    background.add_task(process_views, d, params)
+    fn = process_views if _read_job(d)["mode"] == "views" else process_video
+    background.add_task(fn, d, params)
     return {"status": "queued"}
 
 
