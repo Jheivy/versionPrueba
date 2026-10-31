@@ -13,7 +13,7 @@
     h1 { font-size:1.4rem; } .card { background:var(--card); border-radius:12px; padding:16px; margin-bottom:16px; }
     label { display:block; margin:12px 0 4px; font-weight:600; }
     input[type=file] { width:100%; } button { width:100%; padding:14px; border:0; border-radius:10px; background:var(--accent); color:#fff; font-size:1rem; margin-top:16px; }
-    .muted { color:var(--muted); font-size:.9rem; } li { margin:6px 0; }
+    .muted { color:var(--muted); font-size:.9rem; } li { margin:6px 0; cursor:pointer; } .row { display:flex; gap:8px; } input[type=number] { width:100%; box-sizing:border-box; padding:10px; margin-top:8px; }
   </style>
 </head>
 <body>
@@ -31,6 +31,24 @@
     <p id="status" class="muted" role="status"></p>
   </form>
   <div class="card"><strong>Trabajos</strong><ul id="jobs"></ul></div>
-  <script src="app.js"></script>
+  <div id="detail" class="card" hidden>
+    <strong id="dtitle"></strong>
+    <p id="dstatus" class="muted" role="status"></p>
+    <canvas id="view" style="width:100%;height:300px;border-radius:8px;background:var(--bg)"></canvas>
+    <p id="ddims" class="muted"></p>
+    <form id="params">
+      <label>Medidas con calibre (mm) — deja vacío lo que no sepas</label>
+      <div class="row">
+        <input name="ancho" type="number" step="0.1" min="0" placeholder="Ancho X">
+        <input name="fondo" type="number" step="0.1" min="0" placeholder="Fondo Y">
+        <input name="alto" type="number" step="0.1" min="0" placeholder="Alto Z">
+      </div>
+      <input name="holgura" type="number" step="0.05" placeholder="Holgura ± mm (ej. 0.2)">
+      <button type="submit">Regenerar</button>
+    </form>
+    <p id="dlinks"></p>
+  </div>
+  <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
+  <script type="module" src="app.js"></script>
 </body>
 </html>

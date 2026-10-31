@@ -39,3 +39,35 @@ def test_full_job_makes_stl(tmp_path):
     m = trimesh.load(tmp_path / "output" / "pieza.stl")
     assert np.allclose(m.extents, [40, 20, 30], atol=1.0)
     assert m.is_watertight
+
+
+def _upload_L(c):
+    shots = {
+        "planta": [("rect", 0, (60, 100, 40, 20))],
+        "alzado": [("poly", 0, [(60, 130), (100, 130), (100, 120), (70, 120), (70, 100), (60, 100)])],
+        "perfil": [("rect", 0, (60, 100, 20, 30))],
+    }
+    files = [("files", (f"{n}.jpg", cv2.imencode(".jpg", photo(SHEET, s))[1].tobytes(), "image/jpeg"))
+             for n, s in shots.items()]
+    return c.post("/api/jobs", data={"mode": "views", "views": ",".join(shots)}, files=files).json()["id"]
+
+
+def test_params_rescale_and_holgura(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from app import main
+    monkeypatch.setattr(main, "STORAGE", tmp_path)
+    c = TestClient(main.app)
+    jid = _upload_L(c)
+    job = c.get(f"/api/jobs/{jid}").json()
+    assert job["status"] == "done" and job["dims"]["ancho"] == pytest.approx(40, abs=1)
+
+    assert c.post(f"/api/jobs/{jid}/params", json={"ancho": 44.0, "alto": 33.0}).status_code == 200
+    job = c.get(f"/api/jobs/{jid}").json()
+    assert job["status"] == "done" and job["params"] == {"ancho": 44.0, "alto": 33.0}
+    m = trimesh.load(tmp_path / jid / "output" / "pieza.stl")
+    assert np.allclose(m.extents, [44, 20, 33], atol=1.2)
+
+    c.post(f"/api/jobs/{jid}/params", json={"holgura": 0.5})
+    m = trimesh.load(tmp_path / jid / "output" / "pieza.stl")
+    assert m.extents[0] == pytest.approx(41, abs=1.2)  # +0,5 por cada lado

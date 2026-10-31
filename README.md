@@ -9,7 +9,8 @@ Diseño completo y hoja de ruta: [docs/DISENO.md](docs/DISENO.md).
 - [x] Generador `.scad` por intersección de vistas (`server/app/views/scad_writer.py`)
 - [x] Hito 2: hoja de marcadores ArUco (`tools/marker_sheet.py`) + rectificación a mm (`rectify.py`)
 - [x] Hito 3: contornos → `.scad` → `.stl` automático al subir (`pipeline.py`)
-- [ ] Hitos 4–6: visor 3D, cotas, launchd/mDNS, fotogrametría
+- [x] Hito 4: visor 3D (three.js) y cotas de calibre + holgura con regeneración
+- [ ] Hitos 5–6: launchd/mDNS + carpeta del slicer, fotogrametría
 
 ## Arranque en el Mac
 ```bash

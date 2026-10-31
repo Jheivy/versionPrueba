@@ -8,7 +8,7 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import Body, BackgroundTasks, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -88,6 +88,16 @@ def list_jobs():
 @app.get("/api/jobs/{job_id}")
 def get_job(job_id: str):
     return _read_job(_job_dir(job_id))
+
+
+@app.post("/api/jobs/{job_id}/params")
+def set_params(job_id: str, background: BackgroundTasks, params: dict = Body(...)):
+    """Cotas medidas con calibre (ancho/fondo/alto, mm) y holgura; regenera la pieza."""
+    d = _job_dir(job_id)
+    if _read_job(d)["mode"] != "views":
+        raise HTTPException(400, "solo disponible en modo views")
+    background.add_task(process_views, d, params)
+    return {"status": "queued"}
 
 
 @app.get("/api/jobs/{job_id}/files/{name}")
