@@ -12,7 +12,7 @@ class NoShapeFound(Exception):
 
 
 def extract(sheet: np.ndarray, px_per_mm: float = 10.0, min_area_mm2: float = 25.0,
-            epsilon_mm: float = 0.15):
+            epsilon_mm: float = 0.15, return_origin: bool = False):
     """Devuelve [exterior, hueco1, ...] como listas de (x, y) en mm, con el origen en
     la esquina inferior izquierda de la caja de la pieza (eje y hacia arriba)."""
     gray = sheet if sheet.ndim == 2 else cv2.cvtColor(sheet, cv2.COLOR_BGR2GRAY)
@@ -42,4 +42,5 @@ def extract(sheet: np.ndarray, px_per_mm: float = 10.0, min_area_mm2: float = 25
         ap = cv2.approxPolyDP(found[i], epsilon_mm * px_per_mm, True).reshape(-1, 2) / px_per_mm
         polys.append(ap)
     x0, y1 = polys[0][:, 0].min(), polys[0][:, 1].max()
-    return [[(float(x - x0), float(y1 - y)) for x, y in p] for p in polys]
+    out = [[(float(x - x0), float(y1 - y)) for x, y in p] for p in polys]
+    return (out, (float(x0), float(y1))) if return_origin else out  # origen: mm en la hoja
