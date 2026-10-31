@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Scan2Print</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#1f6feb">
+  <style>
+    :root { --bg:#fff; --fg:#1b1f24; --muted:#656d76; --accent:#1f6feb; --card:#f6f8fa; }
+    @media (prefers-color-scheme: dark) { :root { --bg:#0d1117; --fg:#e6edf3; --muted:#8d96a0; --card:#161b22; } }
+    body { margin:0; padding:16px; font-family:system-ui,sans-serif; background:var(--bg); color:var(--fg); max-width:640px; margin-inline:auto; }
+    h1 { font-size:1.4rem; } .card { background:var(--card); border-radius:12px; padding:16px; margin-bottom:16px; }
+    label { display:block; margin:12px 0 4px; font-weight:600; }
+    input[type=file] { width:100%; } button { width:100%; padding:14px; border:0; border-radius:10px; background:var(--accent); color:#fff; font-size:1rem; margin-top:16px; }
+    .muted { color:var(--muted); font-size:.9rem; } li { margin:6px 0; cursor:pointer; } .row { display:flex; gap:8px; } input[type=number] { width:100%; box-sizing:border-box; padding:10px; margin-top:8px; }
+  </style>
+</head>
+<body>
+  <h1>Scan2Print</h1>
+  <form id="views" class="card">
+    <strong>Alzado · planta · perfil</strong>
+    <p class="muted">Coloca la hoja de marcadores junto a la pieza o el dibujo.</p>
+    <label for="planta">Planta (desde arriba)</label>
+    <input id="planta" type="file" accept="image/*" capture="environment" required>
+    <label for="alzado">Alzado (de frente)</label>
+    <input id="alzado" type="file" accept="image/*" capture="environment">
+    <label for="perfil">Perfil (lateral)</label>
+    <input id="perfil" type="file" accept="image/*" capture="environment">
+    <button type="submit">Enviar al Mac</button>
+    <p id="status" class="muted" role="status"></p>
+  </form>
+  <form id="video" class="card">
+    <strong>Vídeo → 3D (fotogrametría)</strong>
+    <p class="muted">Graba 30–60 s girando alrededor de la pieza sobre un fondo liso, luz difusa, a 2 alturas. Mejor mate (si brilla, spray mate).</p>
+    <input id="vfile" type="file" accept="video/*" capture="environment" required>
+    <button type="submit">Enviar vídeo al Mac</button>
+    <p id="vstatus" class="muted" role="status"></p>
+  </form>
+  <div class="card"><strong>Trabajos</strong><ul id="jobs"></ul></div>
+  <div id="detail" class="card" hidden>
+    <strong id="dtitle"></strong>
+    <p id="dstatus" class="muted" role="status"></p>
+    <canvas id="view" style="width:100%;height:300px;border-radius:8px;background:var(--bg)"></canvas>
+    <p id="ddims" class="muted"></p>
+    <form id="params">
+      <label>Medidas con calibre (mm) — deja vacío lo que no sepas</label>
+      <input name="largo" type="number" step="0.1" min="0" placeholder="Dimensión más larga (mm)" data-mode="video">
+      <div class="row" data-mode="views">
+        <input name="ancho" type="number" step="0.1" min="0" placeholder="Ancho X">
+        <input name="fondo" type="number" step="0.1" min="0" placeholder="Fondo Y">
+        <input name="alto" type="number" step="0.1" min="0" placeholder="Alto Z">
+      </div>
+      <input name="holgura" type="number" step="0.05" placeholder="Holgura ± mm (ej. 0.2)" data-mode="views">
+      <button type="submit">Regenerar</button>
+    </form>
+    <p id="dlinks"></p>
+  </div>
+  <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
