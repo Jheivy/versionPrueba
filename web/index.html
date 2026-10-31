@@ -2,61 +2,26 @@
 <html lang="es">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Scan2Print</title>
   <link rel="manifest" href="manifest.json">
-  <meta name="theme-color" content="#1f6feb">
-  <style>
-    :root { --bg:#fff; --fg:#1b1f24; --muted:#656d76; --accent:#1f6feb; --card:#f6f8fa; }
-    @media (prefers-color-scheme: dark) { :root { --bg:#0d1117; --fg:#e6edf3; --muted:#8d96a0; --card:#161b22; } }
-    body { margin:0; padding:16px; font-family:system-ui,sans-serif; background:var(--bg); color:var(--fg); max-width:640px; margin-inline:auto; }
-    h1 { font-size:1.4rem; } .card { background:var(--card); border-radius:12px; padding:16px; margin-bottom:16px; }
-    label { display:block; margin:12px 0 4px; font-weight:600; }
-    input[type=file] { width:100%; } button { width:100%; padding:14px; border:0; border-radius:10px; background:var(--accent); color:#fff; font-size:1rem; margin-top:16px; }
-    .muted { color:var(--muted); font-size:.9rem; } li { margin:6px 0; cursor:pointer; } .row { display:flex; gap:8px; } input[type=number] { width:100%; box-sizing:border-box; padding:10px; margin-top:8px; }
-  </style>
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <meta name="theme-color" content="#f6f7f9" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0b0e12" media="(prefers-color-scheme: dark)">
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/components.css">
 </head>
 <body>
-  <h1>Scan2Print</h1>
-  <form id="views" class="card">
-    <strong>Alzado · planta · perfil</strong>
-    <p class="muted">Coloca la hoja de marcadores junto a la pieza o el dibujo.</p>
-    <label for="planta">Planta (desde arriba)</label>
-    <input id="planta" type="file" accept="image/*" capture="environment" required>
-    <label for="alzado">Alzado (de frente)</label>
-    <input id="alzado" type="file" accept="image/*" capture="environment">
-    <label for="perfil">Perfil (lateral)</label>
-    <input id="perfil" type="file" accept="image/*" capture="environment">
-    <button type="submit">Enviar al Mac</button>
-    <p id="status" class="muted" role="status"></p>
-  </form>
-  <form id="video" class="card">
-    <strong>Vídeo → 3D (fotogrametría)</strong>
-    <p class="muted">Graba 30–60 s girando alrededor de la pieza sobre un fondo liso, luz difusa, a 2 alturas. Mejor mate (si brilla, spray mate).</p>
-    <input id="vfile" type="file" accept="video/*" capture="environment" required>
-    <button type="submit">Enviar vídeo al Mac</button>
-    <p id="vstatus" class="muted" role="status"></p>
-  </form>
-  <div class="card"><strong>Trabajos</strong><ul id="jobs"></ul></div>
-  <div id="detail" class="card" hidden>
-    <strong id="dtitle"></strong>
-    <p id="dstatus" class="muted" role="status"></p>
-    <canvas id="view" style="width:100%;height:300px;border-radius:8px;background:var(--bg)"></canvas>
-    <p id="ddims" class="muted"></p>
-    <form id="params">
-      <label>Medidas con calibre (mm) — deja vacío lo que no sepas</label>
-      <input name="largo" type="number" step="0.1" min="0" placeholder="Dimensión más larga (mm)" data-mode="video">
-      <div class="row" data-mode="views">
-        <input name="ancho" type="number" step="0.1" min="0" placeholder="Ancho X">
-        <input name="fondo" type="number" step="0.1" min="0" placeholder="Fondo Y">
-        <input name="alto" type="number" step="0.1" min="0" placeholder="Alto Z">
-      </div>
-      <input name="holgura" type="number" step="0.05" placeholder="Holgura ± mm (ej. 0.2)" data-mode="views">
-      <button type="submit">Regenerar</button>
-    </form>
-    <p id="dlinks"></p>
-  </div>
+  <main id="view" aria-live="polite"></main>
+  <nav class="tabbar" aria-label="Principal">
+    <a href="#/capturar" data-tab="capturar"><span class="icon"><svg viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg></span>Capturar</a>
+    <a href="#/trabajos" data-tab="trabajos"><span class="icon"><svg viewBox="0 0 24 24"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M12 12l8-4.5M12 12L4 7.5M12 12v9"/></svg></span>Trabajos</a>
+    <a href="#/ajustes" data-tab="ajustes"><span class="icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></svg></span>Ajustes</a>
+  </nav>
+  <div id="toasts" aria-live="assertive"></div>
   <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
-  <script type="module" src="app.js"></script>
+  <script type="module" src="js/app.js"></script>
 </body>
 </html>

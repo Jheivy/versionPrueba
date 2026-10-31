@@ -4,6 +4,9 @@ Fotografía una pieza (o su alzado/planta/perfil) con el móvil Android, envíal
 
 Diseño completo y hoja de ruta: [docs/DISENO.md](docs/DISENO.md).
 
+## Interfaz (PWA)
+Tres pestañas — **Capturar · Trabajos · Ajustes** —, cámara guiada con semáforo en vivo (hoja detectada, nitidez, luz), revisión de contornos antes de generar, progreso por pasos, visor 3D con rejilla de 1 cm y cubo de referencia, y ajuste de medidas con calibre/holgura. Código en `web/` (`css/`, `js/`, `js/views/`), sin dependencias de build.
+
 ## Estado
 - [x] Hito 1: servidor FastAPI + PWA que sube fotos al Mac
 - [x] Generador `.scad` por intersección de vistas (`server/app/views/scad_writer.py`)
