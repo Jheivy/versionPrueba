@@ -25,7 +25,7 @@ jobs:
         run: pip install -r server/requirements-dev.txt
 
       - name: Lint (ruff)
-        run: ruff check server tools
+        run: ruff check server tools tests/e2e
 
       - name: Tests
         working-directory: server
@@ -33,3 +33,19 @@ jobs:
 
       - name: Sintaxis JS de la PWA
         run: for f in web/js/*.js web/js/views/*.js; do node --input-type=module --check < "$f" || exit 1; done
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: tests/e2e/package-lock.json
+
+      - name: Instalar Playwright y Chromium
+        working-directory: tests/e2e
+        run: npm ci && npx playwright install --with-deps chromium
+
+      - name: Pruebas e2e (móvil, claro y oscuro)
+        working-directory: tests/e2e
+        env:
+          PYTHON: python
+        run: npm test

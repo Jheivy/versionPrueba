@@ -1,89 +1,78 @@
 # Diseño: Scan2Print — de foto/vídeo a .scad/.stl (Android → Mac mini hub)
 
+Documento de arquitectura **del estado actual**. Uso y opciones: [README](../README.md). Lo que no está hecho, al final.
+
 ## Contexto
-Replicar piezas rotas para imprimir en 3D. Repo vacío (`jheivy/versionprueba`, rama `claude/mobile-3d-reconstruction-app-98dg7q`).
-Decisiones: Mac mini Apple Silicon como hub, PWA en el móvil servida por el Mac, backend Python/FastAPI, **MVP = alzado/planta/perfil → .scad paramétrico**. Vídeo→malla en fase 2.
+Replicar piezas rotas para imprimir en 3D. El Mac mini (Apple Silicon) es el hub y el Android lo usa como PWA por la
+Wi-Fi de casa. Dos modos de entrada:
+- **3 vistas** (planta/alzado/perfil sobre una hoja A4 de marcadores) → `.scad` paramétrico → `.stl`. Piezas mecánicas.
+- **Vídeo 3D** (giro alrededor de la pieza) → malla con Object Capture (Swift CLI, solo macOS) → `.stl`. Formas orgánicas.
 
 ## Arquitectura
 ```
-Android (PWA, Chrome)  --HTTPS LAN (mDNS scan2print.local)-->  Mac mini
-  cámara / subida                                             FastAPI + cola de trabajos
-  ver resultado (three.js)                                    ├─ vistas/  OpenCV → contornos → .scad (OpenSCAD CLI → .stl)
-                                                              ├─ photogrammetry/ (fase 2) CLI Swift Object Capture → .usdz → .stl
-                                                              └─ storage/jobs/<id>/ + carpeta vigilada para el slicer
+Android (PWA, Chrome)  ──HTTPS LAN──▶  Mac mini: FastAPI (un solo proceso)
+  cámara guiada / galería               ├─ auth.py        emparejamiento por QR, cookie HttpOnly, tokens para agentes
+  visor 3D (three.js)                   ├─ storage.py     límites de subida, tope de disco, retención y limpieza
+  Ajustes, Trabajos, Capturar           ├─ pipeline.py    3 vistas: rectify → contornos → .scad → OpenSCAD → .stl
+                                        ├─ pipeline_video.py  fotogramas → Object Capture CLI → malla → .stl
+                                        └─ ~/Scan2Print/{jobs,out}   trabajos (job.json) y exportaciones (Orca / agentes)
 ```
-- Transferencia: subida HTTP multipart directa en Wi-Fi (rápido, sin nube). Fuera de casa: Tailscale opcional.
-- HTTPS con certificado local (mkcert) — necesario para `getUserMedia` y para instalar la PWA.
-- Salida: los .stl/.3mf se copian a `~/Scan2Print/out/` para abrir en Bambu/Prusa/Orca Slicer (o lanzar el slicer por CLI).
+- Estado de cada trabajo: `jobs/<id>/job.json` (escritura atómica, un lock por trabajo, un único *worker* pesado a la vez).
+- Salida: `.stl` y `.scad` copiados a `~/Scan2Print/out/` (el STL de una regeneración sustituye al anterior) y, si se define,
+  aviso por webhook (`SCAN2PRINT_WEBHOOK`) para tu página de impresión.
+- Red: HTTPS con mkcert (necesario para la cámara y para instalar la PWA), mDNS `scan2print.local`, `launchd` en `deploy/`.
 
-## Medición de tamaños (clave)
-1. **Marcador de referencia**: hoja impresa con ArUco/ChArUco de tamaño conocido (p.ej. 50 mm) bajo el objeto o junto al dibujo → corrección de perspectiva + escala mm/px. Es el método principal.
-2. **Cotas manuales**: en la PWA el usuario puede fijar 1–n medidas tomadas con calibre ("este lado = 23.4 mm") y el sistema reescala; tiene prioridad sobre el marcador.
-3. Fase 2: escala en fotogrametría con el mismo tapete ChArUco (Object Capture no da escala absoluta fiable).
-4. Tolerancia de impresión configurable (holgura ±0.2 mm) como parámetro en el .scad.
+## Medición (lo que más importa)
+1. **Hoja de marcadores** ArUco `DICT_4X4_50` en las 4 esquinas de un A4 (marcador de 30 mm): homografía → 1 mm = 10 px (`rectify.py`).
+2. **Contorno** por umbral de Otsu en la hoja rectificada, simplificación Douglas-Peucker y huecos como contornos interiores
+   (`contours.py`). Los huecos circulares se reconocen y pasan a ser parámetros del `.scad` (`holes.py`).
+3. **Paralaje** (`parallax.py`): la cara superior de la pieza está más cerca de la cámara y se ve más grande. Se estima la
+   distancia y el punto bajo la cámara desde la homografía (focal del EXIF o 26 mm típicos) y se deshace el factor `D/(D−h)`
+   con la profundidad que dan las otras vistas. Con la cámara a 25–45 cm: ±1,2 mm en 40×20×30 mm (sin corregir, +7 a +11 %).
+4. **Enderezado** (`regularize.py`): rectas y ángulos de 90° exactos hasta ~4° de desvío.
+5. **Coherencia** (`coherence.py`): cada dimensión sale en dos vistas (ancho: planta y alzado; fondo: planta y perfil; alto:
+   alzado y perfil); si difieren más de 0,8 mm o el 2 % se avisa antes de generar.
+6. **Cotas con calibre**: tienen prioridad sobre todo lo anterior y reescalan cada vista desde su propio tamaño.
+7. Resultado: `scad_writer.py` escribe un `.scad` legible (variables arriba, `polygon()` por vista) y el sólido es la
+   **intersección de las tres extrusiones** (visual hull ortográfico). Ver límites abajo.
+8. Vídeo: escala por una cota (`largo`) o, sin ella, estimada y marcada como tal.
 
-## Modo MVP: alzado/planta/perfil → 3D
-Entrada: 3 fotos (o 1 hoja con las 3 vistas en cuadrícula conocida), cada una con marcador o con cotas.
-Pipeline (`server/app/views/`):
-1. `rectify.py` – detecta ArUco, homografía, recorta y escala a mm.
-2. `contours.py` – umbral adaptativo + `findContours`, simplificación (Douglas-Peucker), detección de círculos (Hough) para agujeros; contornos interiores = huecos.
-3. `reconstruct.py` – **intersección de extrusiones**: extruir planta en Z, alzado en Y, perfil en X e `intersection()` (visual hull ortográfico). Funciona muy bien para piezas prismáticas/mecánicas.
-4. `scad_writer.py` – genera .scad legible con variables al inicio (`ancho`, `alto`, `holgura`, `diam_agujero_1`…) y `polygon()` por vista → editable a mano.
-5. `export.py` – `openscad -o pieza.stl pieza.scad` (subprocess) + validación con `trimesh` (watertight, dimensiones).
-Alternativa interna: CadQuery para exportar también STEP — opcional.
+## Interfaz (PWA en `web/`, sin paso de compilación)
+- **Navegación:** barra inferior flotante (Capturar · Trabajos · Ajustes), router por hash con View Transitions, pantalla de
+  emparejamiento si el móvil no está autorizado. ES modules, three.js y fuentes locales (la app no necesita internet),
+  service worker generado por el servidor (versionado por hash de contenido), gzip + caché inmutable.
+- **Captura:** cámara guiada con `/api/detect` cada ~700 ms (hoja visible, nitidez, luz, distancia) y disparo activo solo en
+  verde; alternativa de galería/cámara nativa.
+- **Revisión de contornos:** el trabajo se pausa en `review` y muestra contorno (naranja) y huecos (turquesa); se puede
+  repetir una foto o continuar. Un aviso plegable señala las vistas que no cuadran.
+- **Resultado:** miniatura isométrica renderizada en el servidor (`/api/jobs/{id}/thumb.png`), visor 3D con cotas, rejilla de
+  1 cm, cubo de referencia y **corte por plano en X, Y o Z** para ver el interior; medidas, agujeros (con diámetro estándar
+  probable), ajuste de medidas y descarga STL/.scad.
+- **Ajustes:** estado del servidor, almacenamiento (uso, retención, límites, borrado manual), seguridad (dispositivos, QR).
+- **Identidad visual «taller de precisión»:** grafito y papel técnico con rejilla de plano, botón principal de tinta sólida,
+  un único acento naranja (el color del filamento; también marca cotas, foco y progreso), colores de eje rojo/verde/azul
+  para X/Y/Z, IBM Plex Sans y Mono (cifras), claro y oscuro, objetivos táctiles ≥ 44 px, `prefers-reduced-motion`.
+  Los tokens están en `web/css/tokens.css`; los componentes (`.btn`, `.chip`, `.note`, `.spec`, `.mfield`, `.seg`) en `components.css`.
+- **Gestos y respuesta:** deslizar para borrar, hoja inferior arrastrable, tirar para actualizar, hápticos configurables.
 
-## PWA (`web/`)
-- Vite + TypeScript simple (sin framework pesado), `manifest.json` + service worker.
-- Pantallas: Nuevo trabajo → elegir modo → asistente de captura (guía "foto de planta", "alzado", "perfil", overlay para encuadrar) → introducir cotas → enviar → progreso (SSE/polling) → visor 3D (three.js, STLLoader) con dimensiones → "Enviar a carpeta del slicer".
-- Editor de cotas sobre la imagen rectificada: el usuario toca dos puntos y escribe la medida.
+## Seguridad y límites
+Todo `/api` exige dispositivo emparejado (cookie o Bearer); CSRF por `Origin`; solo hashes en disco. Subidas: foto 40 MB,
+vídeo 1,5 GB, 400 ficheros, cuerpos cortados por bytes recibidos; 20 GB de tope de disco con expulsión de lo más antiguo;
+retención de 30 días desde el último uso. Detalle y variables de entorno en el README.
 
-## Backend (`server/`)
-- FastAPI + uvicorn, `jobs` en SQLite (estado, modo, ficheros), workers con `asyncio`/`ProcessPoolExecutor`.
-- Endpoints: `POST /jobs` (subida), `GET /jobs/{id}`, `GET /jobs/{id}/preview` (contornos detectados para corregir), `POST /jobs/{id}/params` (cotas/ajustes → regenera), `GET /jobs/{id}/files/{name}`.
-- Dependencias: opencv-contrib-python (ArUco), numpy, trimesh, shapely; OpenSCAD instalado vía Homebrew.
-- Servicio autoarrancable con `launchd` + anuncio mDNS (`zeroconf`).
+## Pruebas
+- `server/tests` (pytest, ~120): imágenes sintéticas con ArUco, fotos en perspectiva 3D real (`synth.photo3d`), API,
+  autenticación, límites, limpieza, OpenSCAD real (la CI lo instala).
+- `tests/e2e` (Playwright): arranca el servidor con trabajos de ejemplo y recorre la app en móvil (claro y oscuro):
+  navegación, visor 3D y corte, revisión, ajustes, y una auditoría de desbordes, objetivos táctiles y botones sin nombre.
+- Pendiente de **verificación real**: fotos de móvil, el CLI de Object Capture, orientación en Orca y `launchd` en el Mac.
 
-## Fase 2: vídeo → malla
-- `mac/ObjectCaptureCLI/` (Swift, `PhotogrammetrySession`, detail `.full`) recibe carpeta de fotogramas.
-- Backend: extraer fotogramas del vídeo con ffmpeg (≈2–3 fps, descartar borrosos por varianza del Laplaciano), lanzar CLI, convertir .usdz/.obj → .stl con trimesh, escalar con el tapete ChArUco o con una cota manual, limpiar/rellenar (cerrar agujeros, decimar).
-- Consejo de captura en la PWA: objeto sobre tapete, giro 360° a 2 alturas, luz difusa, objetos brillantes → spray mate.
-
-## Fase 3 (ideas)
-- Mesa giratoria + modo "fotos automáticas".
-- Ajuste de primitivas (cilindros/planos) sobre la malla para obtener .scad paramétrico desde vídeo.
-- Reparar pieza rota: reflejar la mitad sana / unir fragmentos.
-
-## Estructura del repo
-```
-server/app/{main.py,jobs.py,views/,photogrammetry/,export.py}
-server/tests/  (imágenes sintéticas con ArUco + piezas conocidas)
-web/  (PWA)
-mac/ObjectCaptureCLI/  (fase 2)
-tools/marker_sheet.py  (genera PDF A4 con ArUco/ChArUco para imprimir)
-docs/  (guía de captura, instalación en el Mac)
-```
-
-## Hitos
-1. Esqueleto: FastAPI + PWA que sube fotos al Mac por HTTPS y las lista.
-2. Hoja de marcadores + rectificación y escala (test: error < 0.5 mm en 50 mm).
-3. Contornos → .scad → .stl para 1 vista (extrusión) y luego 3 vistas (intersección).
-4. Visor 3D, editor de cotas, regeneración.
-5. launchd + mDNS + carpeta del slicer.
-6. Fase 2 fotogrametría.
-
-## Verificación
-- `pytest server/tests`: imágenes sintéticas renderizadas de un .scad conocido (cubo con agujero, pieza en L) → reconstrucción y comparación de dimensiones (bbox, volumen con trimesh, tolerancia ±0.5 mm).
-- `openscad` genera STL sin errores y `trimesh.is_watertight`.
-- E2E: desde el Android en la misma Wi-Fi abrir `https://scan2print.local`, instalar PWA, fotografiar una pieza real medida con calibre, imprimir y comparar.
-
-
----
-
-## Rediseño de la interfaz (v0.2)
-- **Principios:** una acción primaria por pantalla · mostrar el siguiente paso, no solo el estado · medidas siempre en mm · pulgar (acciones abajo) · funciona sin visor 3D (CDN caído).
-- **Navegación:** barra inferior (Capturar · Trabajos · Ajustes), router por hash (`#/trabajos/<id>`).
-- **Captura:** selector de método con ayuda; cámara guiada con `/api/detect` cada ~700 ms (hoja ≥ 2 marcadores, nitidez, luz) y botón de disparo activo solo en verde; alternativa de galería/cámara nativa.
-- **Revisión de contornos:** el trabajo se pausa en `review` y muestra el contorno (azul) y los huecos (naranja) detectados; se puede repetir una foto concreta (`POST /api/jobs/{id}/inputs`) o continuar (`/confirm`).
-- **Progreso:** campo `step` en `job.json` (`rectifying → contours → modeling → exporting`; vídeo: `frames → reconstruction → cleaning → exporting`).
-- **Errores:** mensajes que dicen qué foto falló y cómo repetirla (`error_view`).
-- **Sistema visual:** tokens CSS claro/oscuro, acento único, objetivos táctiles ≥ 48 px, `prefers-reduced-motion`.
+## Límites conocidos y siguientes pasos
+- La intersección de extrusiones no reproduce huecos internos ni cóncavos que no se vean en alguna vista; es ideal para
+  piezas prismáticas. El vídeo cubre las formas orgánicas pero sin parámetros editables.
+- Si la pieza no está centrada bajo la cámara el paralaje deja ~1 mm de residuo; una focal muy distinta de la supuesta
+  falsea la distancia.
+- Contorno por Otsu: sombras fuertes, piezas oscuras o brillantes y papel no blanco lo degradan.
+- Solo agujeros circulares (no ranuras ni avellanados); la hoja A4 limita la pieza a ~190 × 277 mm.
+- Ideas: escala automática en vídeo con la hoja en escena, mesa giratoria, ajuste de primitivas sobre la malla, exportar 3MF,
+  reparar pieza rota reflejando la mitad sana.

@@ -155,3 +155,11 @@ La escala de Object Capture es aproximada: indica en la app la **dimensión más
 ```bash
 cd server && .venv/bin/pytest && .venv/bin/ruff check ..
 ```
+**e2e (interfaz en un móvil simulado, claro y oscuro)** — Playwright arranca el servidor con trabajos de ejemplo y comprueba la
+navegación, las medidas, el visor 3D y el corte, la revisión y Ajustes, además de una auditoría de desbordes, objetivos
+táctiles < 44 px y botones sin nombre en 2 anchos × 2 temas:
+```bash
+cd tests/e2e && npm ci && npx playwright install chromium
+PYTHON=../../server/.venv/bin/python npm test        # E2E_VERBOSE=1 para ver el log del servidor
+```
+La CI ejecuta las dos baterías.
