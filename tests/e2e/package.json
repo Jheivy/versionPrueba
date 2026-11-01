@@ -1,0 +1,7 @@
+{
+  "name": "scan2print-e2e",
+  "private": true,
+  "type": "module",
+  "scripts": { "test": "node --test --test-concurrency=1 --test-timeout=120000 app.test.mjs" },
+  "devDependencies": { "playwright": "1.63.0" }
+}
