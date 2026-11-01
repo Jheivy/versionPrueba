@@ -1,4 +1,5 @@
 import { navigate, route, start } from "./router.js";
+import { startOutbox } from "./outbox.js";
 import { haptic, toast } from "./ui.js";
 
 // Cada pantalla se carga bajo demanda: el arranque solo trae lo que se ve.
@@ -17,6 +18,13 @@ start();
 fetch("/api/auth/status").then((r) => r.json()).then((st) => {
   if (st.required && !st.authenticated && !location.hash.startsWith("#/emparejar")) navigate("/emparejar", true);
 }).catch(() => {});
+// Bandeja de salida: reintenta sola las capturas que no llegaron al Mac y marca cuántas hay sobre la pestaña Trabajos.
+addEventListener("s2p:outbox", (e) => {
+  const tab = document.querySelector('.tabbar a[data-tab="trabajos"]');
+  if (e.detail.count) { tab?.setAttribute("data-pending", e.detail.count); tab?.setAttribute("aria-label", `Trabajos, ${e.detail.count} pendientes de enviar`); }
+  else { tab?.removeAttribute("data-pending"); tab?.removeAttribute("aria-label"); }
+});
+startOutbox();
 document.querySelector(".tabbar")?.addEventListener("click", (e) => e.target.closest("a") && haptic("tick"));
 
 // Con el navegador en reposo se precargan el resto de pantallas y el visor 3D (three.js, local). Se usa

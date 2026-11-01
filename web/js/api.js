@@ -28,6 +28,9 @@ export const post = (p, body) => api(p, { method: "POST", headers: { "Content-Ty
 export const patch = (p, body) => api(p, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body ?? {}) });
 export const del = (p) => api(p, { method: "DELETE" });
 
+/** Error de subida: `.network` si no hubo respuesta (sin Wi-Fi, corte), `.status` si el Mac contestó con un error. */
+const uploadError = (msg, extra) => Object.assign(new Error(msg), extra);
+
 /** POST multipart con progreso (0..1). */
 export function upload(path, fd, onProgress) {
   return new Promise((resolve, reject) => {
@@ -35,11 +38,12 @@ export function upload(path, fd, onProgress) {
     x.open("POST", "/api" + path);
     x.upload.onprogress = (e) => e.lengthComputable && onProgress?.(e.loaded / e.total);
     x.onload = () => {
-      if (x.status === 401) { unauthorized(); return reject(new Error("Este móvil no está emparejado")); }
+      if (x.status === 401) { unauthorized(); return reject(uploadError("Este móvil no está emparejado", { status: 401 })); }
       let b; try { b = JSON.parse(x.responseText); } catch { /* sin cuerpo */ }
-      x.status < 300 ? resolve(b) : reject(new Error(typeof b?.detail === "string" ? b.detail : `Error ${x.status}`));
+      x.status < 300 ? resolve(b) : reject(uploadError(typeof b?.detail === "string" ? b.detail : `Error ${x.status}`, { status: x.status }));
     };
-    x.onerror = () => reject(new Error("Sin conexión con el Mac"));
+    const lost = () => reject(uploadError("Sin conexión con el Mac", { network: true }));
+    x.onerror = x.onabort = x.ontimeout = lost;
     x.send(fd);
   });
 }

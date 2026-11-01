@@ -100,6 +100,19 @@ recupera 40×20×30 mm con ±1,2 mm (sin corregir: +7 a +11 %).
   piezas de 4 cm); una focal muy distinta de la supuesta (p. ej. gran angular) falsea la distancia, y una cota medida con
   calibre siempre manda. Para el mejor resultado: centra la pieza, aleja el móvil y usa zoom 2×.
 
+## Bandeja de salida (sin Wi-Fi no se pierde nada)
+Al pulsar «Enviar al Mac», la captura se guarda primero en el móvil (IndexedDB, `web/js/outbox.js`) y después se sube:
+- **Sin red** (o el Mac apagado): queda en *Trabajos → Pendientes de enviar* («Esperando conexión», con un contador sobre la
+  pestaña) y **sobrevive a cerrar o recargar la app**. Se reintenta sola al volver la red, al volver a la app y al arrancar
+  (esperas de 5 s, 30 s, 2 min y 5 min); también se puede reintentar o descartar a mano.
+- **Sin duplicados:** cada envío lleva un `client_id` (32 hex) que el servidor usa como id del trabajo. Si el Mac recibió todo
+  pero se perdió la respuesta, el reintento primero pregunta si el trabajo ya existe y, si no, el servidor devuelve el
+  existente (200) en vez de crear otro. Un `client_id` mal formado da 400; una subida idéntica a medias, 409.
+- **Rechazos del Mac** (límite de tamaño, formato, disco lleno) **no se encolan**: se muestran al momento, como siempre.
+- Si el navegador no deja guardar (cuota, modo privado) se envía directo, como antes.
+- Límite: los reintentos ocurren con la app abierta (no hay *Background Sync* con la app cerrada) y un corte en mitad de una
+  subida la repite entera (no se reanuda por trozos).
+
 ## Límites y limpieza
 - **Subida:** foto máx. 40 MB (`SCAN2PRINT_MAX_PHOTO_MB`), vídeo máx. 1500 MB (`SCAN2PRINT_MAX_VIDEO_MB`), hasta 400 ficheros
   (`SCAN2PRINT_MAX_FILES`). Se guarda en bloques y, si se pasa, responde 413 sin dejar restos; las peticiones desmesuradas se

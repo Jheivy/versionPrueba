@@ -159,6 +159,12 @@ input:focus, select:focus { outline: none; border-color: var(--accent); box-shad
 img.thumb.model { object-fit: contain; padding: 4px; }
 .job .name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; letter-spacing: -.01em; }
 .job .meta { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; }
+.job.queued { grid-template-columns: 72px minmax(0, 1fr) auto; border-style: dashed; }
+.job.queued .thumb { display: grid; place-items: center; color: var(--muted); }
+.job.queued .name { white-space: normal; }
+.qactions { display: flex; }
+.pending:empty { display: none; }
+.tabbar a[data-tab="trabajos"][data-pending]::after { content: attr(data-pending); position: absolute; top: 4px; right: calc(50% - 22px); min-width: 18px; height: 18px; padding: 0 5px; display: grid; place-items: center; border-radius: 9px; background: var(--accent); color: #fff; font: 700 .65rem/1 var(--mono); }
 .job .dimline { font: 500 .78rem/1.2 var(--mono); color: var(--muted); letter-spacing: -.02em; }
 .ptr { display: grid; place-items: center; height: 0; overflow: hidden; color: var(--accent); transition: height var(--t-med) var(--ease); }
 .ptr .icon { transition: transform var(--t-fast); }
