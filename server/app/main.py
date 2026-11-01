@@ -21,7 +21,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from . import auth, jobs
+from . import auth, jobs, storage
 from .pipeline import process_views
 from .pipeline_video import process_video
 from .views.contours import NoShapeFound
@@ -55,6 +55,18 @@ async def _announce(state: dict) -> None:
         pass  # el anuncio es opcional
 
 
+async def _sweep() -> None:
+    """Limpieza periódica de trabajos antiguos (al arrancar y cada 6 h)."""
+    while True:
+        days = storage.retention_days()
+        if days:
+            try:
+                await asyncio.to_thread(storage.cleanup, STORAGE, days)
+            except Exception:
+                pass
+        await asyncio.sleep(6 * 3600)
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     jobs.recover_stale(STORAGE)
@@ -65,8 +77,10 @@ async def lifespan(_: FastAPI):
             pass
     state: dict = {}
     task = asyncio.create_task(_announce(state))
+    sweeper = asyncio.create_task(_sweep())
     yield
     task.cancel()
+    sweeper.cancel()
     if "azc" in state:
         await state["azc"].async_unregister_service(state["info"])
         await state["azc"].async_close()
@@ -97,6 +111,11 @@ PUBLIC_API = {("POST", "/api/pair"), ("GET", "/api/auth/status")}   # lo único 
 async def require_pairing(request: Request, call_next):
     """Todo /api exige un dispositivo emparejado (cookie o Bearer), salvo lo imprescindible para emparejar."""
     path = request.url.path
+    if path.startswith("/api/") and request.method == "POST":   # rechazo temprano de subidas desmesuradas
+        try:
+            storage.check_content_length(request.headers.get("content-length"))
+        except HTTPException as e:
+            return JSONResponse({"detail": e.detail}, status_code=e.status_code)
     if not path.startswith("/api/") or not auth.enabled() or (request.method, path) in PUBLIC_API:
         return await call_next(request)
     who = auth.identify(request.headers, request.cookies, request.client.host if request.client else None)
@@ -203,16 +222,21 @@ async def create_job(
         if len(labels) != len(files) or not set(labels) <= VIEW_NAMES:
             raise HTTPException(400, "indica una vista (planta/alzado/perfil) por fichero")
 
+    storage.check_count(len(files))
     job_id = uuid.uuid4().hex
     d = STORAGE / job_id / "input"
     d.mkdir(parents=True)
     saved = []
-    for i, f in enumerate(files):
-        fname = SAFE_NAME.sub("_", Path(f.filename or f"file{i}").name)
-        if labels:
-            fname = f"{labels[i]}_{fname}"
-        (d / fname).write_bytes(await f.read())
-        saved.append(fname)
+    try:
+        for i, f in enumerate(files):
+            fname = SAFE_NAME.sub("_", Path(f.filename or f"file{i}").name)
+            if labels:
+                fname = f"{labels[i]}_{fname}"
+            await storage.save_upload(f, d / fname)
+            saved.append(fname)
+    except BaseException:
+        shutil.rmtree(STORAGE / job_id, ignore_errors=True)   # sin trabajos a medias
+        raise
 
     job = {
         "id": job_id,
@@ -230,6 +254,24 @@ async def create_job(
     else:
         _enqueue(background, STORAGE / job_id, process_video)
     return job
+
+
+@app.get("/api/storage")
+def storage_info():
+    return {**storage.usage(STORAGE), "retention_days": storage.retention_days(),
+            "max_photo_mb": storage.max_photo() // storage.MB, "max_video_mb": storage.max_video() // storage.MB}
+
+
+@app.post("/api/storage/cleanup")
+def storage_cleanup(body: dict = Body(default={})):
+    """Borra trabajos sin tocar desde hace `days` días (mínimo 1); por defecto, la retención configurada."""
+    try:
+        days = float(body.get("days") or storage.retention_days() or 30)
+    except (TypeError, ValueError):
+        raise HTTPException(400, "days inválido") from None
+    if days < 1:
+        raise HTTPException(400, "days debe ser al menos 1")
+    return storage.cleanup(STORAGE, days)
 
 
 @app.get("/api/jobs")
@@ -296,7 +338,11 @@ async def replace_view(job_id: str, background: BackgroundTasks, view: str = For
     for old in inp.glob(f"{view}_*"):
         old.unlink()
     name = f"{view}_{SAFE_NAME.sub('_', Path(file.filename or 'foto.jpg').name)}"
-    (inp / name).write_bytes(await file.read())
+    try:
+        await storage.save_upload(file, inp / name)
+    except BaseException:
+        jobs.release(d)
+        raise
     inputs = sorted({*(i for i in job["inputs"] if not i.startswith(f"{view}_")), name})
     _write_job(d, inputs=inputs, status="processing", error=None, error_view=None)
     background.add_task(process_views, d, None, True)  # reservado arriba
@@ -355,7 +401,10 @@ def thumb_model(job_id: str, request: Request):
 @app.post("/api/detect")
 async def detect(file: UploadFile = File(...)):
     """Diagnóstico de un fotograma de la cámara (hoja visible, nitidez, luz)."""
-    img = cv2.imdecode(np.frombuffer(await file.read(), np.uint8), cv2.IMREAD_COLOR)
+    data = await file.read(storage.max_photo() + 1)
+    if len(data) > storage.max_photo():
+        raise HTTPException(413, f"La imagen supera el límite de {storage.max_photo() // storage.MB} MB")
+    img = cv2.imdecode(np.frombuffer(data, np.uint8), cv2.IMREAD_COLOR)
     if img is None:
         raise HTTPException(400, "imagen inválida")
     return analyze(img)

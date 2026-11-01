@@ -66,6 +66,14 @@ extrusiones, así que se recorta a la vista más pequeña y las medidas mostrada
 - O repetir la foto que falle desde la revisión.
 - `job.json` incluye `warnings` (`dim`, `views`, `values`, `diff`); vacío cuando todo cuadra.
 
+## Límites y limpieza
+- **Subida:** foto máx. 40 MB (`SCAN2PRINT_MAX_PHOTO_MB`), vídeo máx. 1500 MB (`SCAN2PRINT_MAX_VIDEO_MB`), hasta 400 ficheros
+  (`SCAN2PRINT_MAX_FILES`). Se guarda en bloques y, si se pasa, responde 413 sin dejar restos; las peticiones desmesuradas se
+  rechazan antes de leerlas (por `Content-Length`).
+- **Limpieza:** los trabajos sin tocar en 30 días (`SCAN2PRINT_RETENTION_DAYS`, `0` = nunca) se borran al arrancar y cada 6 h;
+  nunca los que se están procesando. Los archivos ya exportados a `SCAN2PRINT_OUT` no se tocan.
+  *Ajustes → Almacenamiento* muestra el espacio usado y permite borrar a mano (`GET /api/storage`, `POST /api/storage/cleanup`).
+
 ## Diseño y rendimiento
 **Diseño** (`web/css/`, `web/js/`): identidad «taller de precisión»: grafito y papel técnico, botón principal de tinta sólida, un único acento naranja
 (color del filamento), IBM Plex Sans y Mono para las cifras (local), cotas y corte por plano (X, Y, Z) en el visor 3D, miniaturas con el modelo
