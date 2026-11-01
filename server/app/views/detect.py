@@ -4,11 +4,14 @@ from __future__ import annotations
 import cv2
 import numpy as np
 
+from . import parallax
 from .markers import DICT, marker_corners_mm
+from .rectify import MarkersNotFound, rectify
 
 MIN_SHARPNESS = 60.0   # varianza del Laplaciano (imagen reducida a 480 px)
 MIN_BRIGHTNESS = 70.0  # media de gris 0-255
 MAX_BRIGHTNESS = 245.0  # una hoja blanca bien expuesta ronda 230
+NEAR_MM = 250.0        # más cerca, el paralaje de la cara superior de la pieza pesa demasiado
 
 
 def analyze(image: np.ndarray) -> dict:
@@ -32,5 +35,14 @@ def analyze(image: np.ndarray) -> dict:
         hint = "Demasiada luz o reflejos"
     else:
         hint = "Listo para disparar"
+    dist = None
+    if len(markers) >= 2:
+        try:
+            pose = parallax.camera_pose(rectify(small, 10.0, return_h=True)[1], small.shape)
+            dist = round(pose["dist"]) if pose else None
+        except MarkersNotFound:
+            pass
+    if hint == "Listo para disparar" and dist and dist < NEAR_MM:
+        hint = "Listo · aleja la cámara o usa zoom para medir mejor"
     return {"markers": len(markers), "sharpness": round(sharp, 1), "brightness": round(bright, 1),
-            "ok": hint == "Listo para disparar", "hint": hint, "checks": checks}
+            "ok": hint.startswith("Listo"), "hint": hint, "checks": checks, "distance": dist}

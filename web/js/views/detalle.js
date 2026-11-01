@@ -140,6 +140,15 @@ export function detalle(root, { id }) {
       retry, h("a", { class: "btn btn-block btn-ghost", href: "#/trabajos" }, "Volver a trabajos"));
   }
 
+  /** Qué corrección de perspectiva se aplicó (y un consejo si la cámara estaba muy cerca). */
+  function parallaxNote() {
+    const px = Object.entries(j.parallax || {}).filter(([, v]) => v.factor < 0.995);
+    if (!px.length) return null;
+    const worst = Math.max(...px.map(([, v]) => 1 - v.factor)), near = Math.min(...px.map(([, v]) => v.dist));
+    return h("p", { class: "muted small", style: "margin:0" }, icon("ruler"), ` Perspectiva corregida (hasta −${Math.round(worst * 100)} %). `,
+      near < 250 ? "Con la cámara más lejos y zoom la medida es más fiable." : "");
+  }
+
   /* ---------- Resultado ---------- */
   async function done() {
     const hasStl = j.outputs.includes("pieza.stl");
@@ -173,6 +182,7 @@ export function detalle(root, { id }) {
     body.replaceChildren(...[
       hasStl ? h("div", { class: "viewer" }, h("div", { class: "skeleton" }), canvas, fb, tools, secPanel) : h("div", { class: "banner" }, icon("alert"), "OpenSCAD no está instalado en el Mac, así que no se generó el STL. Descarga el .scad o instala OpenSCAD."),
       specs,
+      parallaxNote(),
       mismatchBanner(false),
       j.holes?.length > 0 && h("div", { class: "holes", "aria-label": "Agujeros detectados" },
         h("div", { class: "eyebrow", style: "margin:2px 0 8px" }, `${j.holes.length} ${j.holes.length === 1 ? "agujero" : "agujeros"}`),
@@ -222,6 +232,9 @@ export function detalle(root, { id }) {
            h("label", { class: "toggle" }, h("span", {}, h("b", {}, "Enderezar contornos"), h("br"),
              h("span", { class: "muted small" }, "Rectas y ángulos de 90° exactos (hasta ~4° de desvío)")),
              h("input", { type: "checkbox", name: "enderezar", checked: (p.enderezar ?? 1) !== 0 })),
+           h("label", { class: "toggle" }, h("span", {}, h("b", {}, "Corregir perspectiva"), h("br"),
+             h("span", { class: "muted small" }, "Compensa que la cara superior de la pieza se ve más grande")),
+             h("input", { type: "checkbox", name: "paralaje", checked: (p.paralaje ?? 1) !== 0 })),
            h("div", { class: "mfield" }, h("span", { class: "lab" }, "Holgura", h("span", { class: "hint" }, "+ agranda · − encoge")), h("div", { class: "stepper" },
              h("button", { type: "button", class: "btn", "aria-label": "Menos", onclick: () => bump(-0.05) }, "−"), holgura,
              h("button", { type: "button", class: "btn", "aria-label": "Más", onclick: () => bump(0.05) }, "+")), presets)],

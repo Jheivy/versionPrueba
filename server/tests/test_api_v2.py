@@ -33,7 +33,7 @@ def c(tmp_path, monkeypatch):
 
 def test_detect_sheet_and_blank(c):
     r = c.post("/api/detect", files={"file": ("f.jpg", enc(photo(SHEET, [])), "image/jpeg")}).json()
-    assert r["markers"] == 4 and r["ok"] is True and r["hint"] == "Listo para disparar"
+    assert r["markers"] == 4 and r["ok"] is True and r["hint"].startswith("Listo")
     assert r["checks"] == {"hoja": True, "nitidez": True, "luz": True}
     gray = enc(np.full((600, 800, 3), 128, np.uint8))
     blank = c.post("/api/detect", files={"file": ("f.jpg", gray, "image/jpeg")}).json()
@@ -89,3 +89,15 @@ def test_rename_thumb_delete(c):
     assert c.get(f"/api/jobs/{jid}/thumb.jpg").content[:2] == b"\xff\xd8"
     assert c.delete(f"/api/jobs/{jid}").status_code == 204
     assert c.get(f"/api/jobs/{jid}").status_code == 404
+
+
+def test_detect_reports_camera_distance_and_advises_when_close(c):
+    from synth import photo3d
+    def detect(dist):
+        img = enc(photo3d(SHEET, (85, 120, 40, 20, 0.01), dist))
+        return c.post("/api/detect", files={"file": ("f.jpg", img, "image/jpeg")}).json()
+
+    far, near = detect(400.0), detect(225.0)
+    assert far["distance"] == pytest.approx(400, rel=0.1) and far["hint"] == "Listo para disparar"
+    assert near["distance"] == pytest.approx(225, rel=0.1)
+    assert near["ok"] and "aleja" in near["hint"]
