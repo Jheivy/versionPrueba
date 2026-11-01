@@ -44,3 +44,26 @@ def photo3d(sheet, box, dist=300.0, tilt=(2.0, -1.5), size=(1600, 2000)):
     pts = [proj((x + dx, y + dy, -z)) for dx in (0, bw) for dy in (0, bl) for z in (0, bh)]
     cv2.fillConvexPoly(img, cv2.convexHull(np.float32(pts)).astype(np.int32), 0)
     return img
+
+
+def scene(sheet, box=(60, 100, 40, 20), color=(0, 0, 0), gradient=0.0, shadow=0.0, noise=0.0, quad=None):
+    """Hoja con una pieza rectangular de `color` (BGR) en condiciones reales: `gradient` (0-1) oscurece la hoja de
+    izquierda a derecha, `shadow` (0-1) añade la sombra suave que proyecta la pieza (desplazada hacia abajo-derecha)
+    y `noise` es la desviación del ruido del sensor. Devuelve la foto en perspectiva (BGR)."""
+    h, w = sheet.shape
+    img = cv2.cvtColor(sheet, cv2.COLOR_GRAY2BGR).astype(np.float32)
+    x, y, bw, bl = (round(v * S) for v in box)
+    if shadow:
+        sh = np.zeros((h, w), np.float32)
+        sh[y + round(3 * S):y + bl + round(3 * S), x + round(3 * S):x + bw + round(3 * S)] = 1
+        sh = cv2.GaussianBlur(sh, (0, 0), 4 * S)
+        img *= (1 - shadow * sh)[..., None]
+    img[y:y + bl, x:x + bw] = color
+    if gradient:
+        img *= (1 - gradient * np.linspace(0, 1, w, dtype=np.float32))[None, :, None]
+    M = cv2.getPerspectiveTransform(np.float32([[0, 0], [w, 0], [w, h], [0, h]]),
+                                    np.float32(quad or [[120, 90], [1500, 160], [1420, 1900], [60, 1750]]))
+    out = cv2.warpPerspective(np.clip(img, 0, 255).astype(np.uint8), M, (1600, 2000), borderValue=(200, 200, 200))
+    if noise:
+        out = np.clip(out + np.random.default_rng(1).normal(0, noise, out.shape), 0, 255).astype(np.uint8)
+    return out

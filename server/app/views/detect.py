@@ -6,7 +6,7 @@ import numpy as np
 
 from . import parallax
 from .markers import DICT, marker_corners_mm
-from .rectify import MarkersNotFound, rectify
+from .rectify import MarkersNotFound, rectify_full
 
 MIN_SHARPNESS = 60.0   # varianza del Laplaciano (imagen reducida a 480 px)
 MIN_BRIGHTNESS = 70.0  # media de gris 0-255
@@ -38,11 +38,13 @@ def analyze(image: np.ndarray) -> dict:
     dist = None
     if len(markers) >= 2:
         try:
-            pose = parallax.camera_pose(rectify(small, 10.0, return_h=True)[1], small.shape)
+            pose = parallax.camera_pose(rectify_full(small, 10.0)[1], small.shape)
             dist = round(pose["dist"]) if pose else None
         except MarkersNotFound:
             pass
     if hint == "Listo para disparar" and dist and dist < NEAR_MM:
         hint = "Listo · aleja la cámara o usa zoom para medir mejor"
+    elif hint == "Listo para disparar" and len(markers) < 4:
+        hint = f"Listo · se ven {len(markers)} de 4 marcadores: encuádralos todos para medir mejor"
     return {"markers": len(markers), "sharpness": round(sharp, 1), "brightness": round(bright, 1),
             "ok": hint.startswith("Listo"), "hint": hint, "checks": checks, "distance": dist}

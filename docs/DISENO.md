@@ -23,19 +23,23 @@ Android (PWA, Chrome)  ──HTTPS LAN──▶  Mac mini: FastAPI (un solo proc
 - Red: HTTPS con mkcert (necesario para la cámara y para instalar la PWA), mDNS `scan2print.local`, `launchd` en `deploy/`.
 
 ## Medición (lo que más importa)
-1. **Hoja de marcadores** ArUco `DICT_4X4_50` en las 4 esquinas de un A4 (marcador de 30 mm): homografía → 1 mm = 10 px (`rectify.py`).
-2. **Contorno** por umbral de Otsu en la hoja rectificada, simplificación Douglas-Peucker y huecos como contornos interiores
-   (`contours.py`). Los huecos circulares se reconocen y pasan a ser parámetros del `.scad` (`holes.py`).
+1. **Hoja de marcadores** ArUco `DICT_4X4_50` en las 4 esquinas de un A4 (marcador de 30 mm): homografía → 1 mm = 10 px
+   (`rectify.py`, esquinas con precisión de subpíxel). Se mide el error con que los marcadores caen en su sitio.
+2. **Contorno** (`contours.py`): se quita el degradado de luz ajustando una superficie al papel, se umbraliza con Otsu
+   y las piezas de color claro se separan del papel por su croma (las sombras no cambian de color); simplificación
+   Douglas-Peucker y huecos como contornos interiores. Los huecos circulares se reconocen y pasan a ser parámetros del `.scad` (`holes.py`).
 3. **Paralaje** (`parallax.py`): la cara superior de la pieza está más cerca de la cámara y se ve más grande. Se estima la
    distancia y el punto bajo la cámara desde la homografía (focal del EXIF o 26 mm típicos) y se deshace el factor `D/(D−h)`
    con la profundidad que dan las otras vistas. Con la cámara a 25–45 cm: ±1,2 mm en 40×20×30 mm (sin corregir, +7 a +11 %).
 4. **Enderezado** (`regularize.py`): rectas y ángulos de 90° exactos hasta ~4° de desvío.
-5. **Coherencia** (`coherence.py`): cada dimensión sale en dos vistas (ancho: planta y alzado; fondo: planta y perfil; alto:
+5. **Calidad** (`job.json: quality, quality_warnings`): por foto, marcadores vistos (<3 avisa), error de la hoja (>0,5 mm: lente
+   que distorsiona o papel arrugado) y contraste del borde (<0,2: pieza clara sobre papel). La revisión y el resultado los muestran.
+6. **Coherencia** (`coherence.py`): cada dimensión sale en dos vistas (ancho: planta y alzado; fondo: planta y perfil; alto:
    alzado y perfil); si difieren más de 0,8 mm o el 2 % se avisa antes de generar.
-6. **Cotas con calibre**: tienen prioridad sobre todo lo anterior y reescalan cada vista desde su propio tamaño.
-7. Resultado: `scad_writer.py` escribe un `.scad` legible (variables arriba, `polygon()` por vista) y el sólido es la
+7. **Cotas con calibre**: tienen prioridad sobre todo lo anterior y reescalan cada vista desde su propio tamaño.
+8. Resultado: `scad_writer.py` escribe un `.scad` legible (variables arriba, `polygon()` por vista) y el sólido es la
    **intersección de las tres extrusiones** (visual hull ortográfico). Ver límites abajo.
-8. Vídeo: escala por una cota (`largo`) o, sin ella, estimada y marcada como tal.
+9. Vídeo: escala por una cota (`largo`) o, sin ella, estimada y marcada como tal.
 
 ## Interfaz (PWA en `web/`, sin paso de compilación)
 - **Navegación:** barra inferior flotante (Capturar · Trabajos · Ajustes), router por hash con View Transitions, pantalla de
@@ -72,7 +76,8 @@ retención de 30 días desde el último uso. Detalle y variables de entorno en e
   piezas prismáticas. El vídeo cubre las formas orgánicas pero sin parámetros editables.
 - Si la pieza no está centrada bajo la cámara el paralaje deja ~1 mm de residuo; una focal muy distinta de la supuesta
   falsea la distancia.
-- Contorno por Otsu: sombras fuertes, piezas oscuras o brillantes y papel no blanco lo degradan.
+- Una pieza blanca sobre el papel blanco no se distingue: el contorno sale con poco contraste y la app lo avisa. Sombras muy
+  duras y papel no blanco también lo degradan.
 - Solo agujeros circulares (no ranuras ni avellanados); la hoja A4 limita la pieza a ~190 × 277 mm.
 - Ideas: escala automática en vídeo con la hoja en escena, mesa giratoria, ajuste de primitivas sobre la malla, exportar 3MF,
   reparar pieza rota reflejando la mitad sana.
