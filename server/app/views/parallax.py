@@ -86,7 +86,8 @@ def correct(contours, circles, origin, nadir, k):
     back = lambda sx, sy: (sx - minx, maxy - sy)       # noqa: E731
     out = [[back(*p) for p in c] for c in pts]
     circ = []
-    for cx, cy, d in circles:
+    for cx, cy, *size in circles:          # círculo: (Ø,)  ranura: (ancho, largo, ángulo); el ángulo no escala
         sx, sy = fwd(cx, cy)
-        circ.append((*back(sx, sy), d * k))
+        scaled = (size[0] * k, size[1] * k, size[2]) if len(size) == 3 else (size[0] * k,)
+        circ.append((*back(sx, sy), *scaled))
     return out, circ

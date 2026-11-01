@@ -27,7 +27,7 @@ Android (PWA, Chrome)  ──HTTPS LAN──▶  Mac mini: FastAPI (un solo proc
    (`rectify.py`, esquinas con precisión de subpíxel). Se mide el error con que los marcadores caen en su sitio.
 2. **Contorno** (`contours.py`): se quita el degradado de luz ajustando una superficie al papel, se umbraliza con Otsu
    y las piezas de color claro se separan del papel por su croma (las sombras no cambian de color); simplificación
-   Douglas-Peucker y huecos como contornos interiores. Los huecos circulares se reconocen y pasan a ser parámetros del `.scad` (`holes.py`).
+   Douglas-Peucker y huecos como contornos interiores. Los huecos circulares y las ranuras se reconocen y pasan a ser parámetros del `.scad` (`holes.py`).
 3. **Paralaje** (`parallax.py`): la cara superior de la pieza está más cerca de la cámara y se ve más grande. Se estima la
    distancia y el punto bajo la cámara desde la homografía (focal del EXIF o 26 mm típicos) y se deshace el factor `D/(D−h)`
    con la profundidad que dan las otras vistas. Con la cámara a 25–45 cm: ±1,2 mm en 40×20×30 mm (sin corregir, +7 a +11 %).
@@ -79,7 +79,7 @@ retención de 30 días desde el último uso. Detalle y variables de entorno en e
   falsea la distancia.
 - Una pieza blanca sobre el papel blanco no se distingue: el contorno sale con poco contraste y la app lo avisa. Sombras muy
   duras y papel no blanco también lo degradan.
-- Solo agujeros circulares (no ranuras ni avellanados); la hoja A4 limita la pieza a ~190 × 277 mm.
+- Agujeros circulares y ranuras (los avellanados y chaflanes no se ven en una silueta); la hoja A4 limita la pieza a ~190 × 277 mm.
 - La escala automática del vídeo depende de que Object Capture conserve el papel y de que los marcadores se lean en la
   textura; está probada con mallas sintéticas, no con una reconstrucción real.
 - Ideas: mesa giratoria, ajuste de primitivas sobre la malla, exportar 3MF,

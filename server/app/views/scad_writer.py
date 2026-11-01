@@ -16,6 +16,7 @@ from collections.abc import Sequence
 Point = tuple[float, float]
 Contours = Sequence[Sequence[Point]]
 Circle = tuple[float, float, float, str | None]  # (cx, cy, Ø, etiqueta estándar)
+Slot = tuple[float, float, float, float, float]   # (cx, cy, ancho, largo total, ángulo°)
 
 
 def _bbox(contours: Contours) -> tuple[float, float]:
@@ -33,14 +34,25 @@ def _polygon(contours: Contours) -> str:
     return f"polygon(points=[{','.join(points)}], paths=[{','.join(paths)}]);"
 
 
-def _view_module(name: str, contours: Contours, circles: Sequence[Circle]) -> str:
-    """Módulo 2D de una vista: contorno + agujeros circulares paramétricos."""
-    if not circles:
+def _view_module(name: str, contours: Contours, circles: Sequence[Circle], slots: Sequence[Slot] = ()) -> str:
+    """Módulo 2D de una vista: contorno + agujeros circulares y ranuras paramétricos."""
+    if not circles and not slots:
         return f"module {name}() {{ offset(delta=holgura) {_polygon(contours)} }}"
-    holes = " ".join(
-        f"translate(pos_agujero_{name}_{i}) circle(d=diam_agujero_{name}_{i}, $fn=64);"
-        for i in range(1, len(circles) + 1))
-    return (f"module {name}() {{ offset(delta=holgura) difference() {{ {_polygon(contours)} {holes} }} }}")
+    holes = [f"translate(pos_agujero_{name}_{i}) circle(d=diam_agujero_{name}_{i}, $fn=64);"
+             for i in range(1, len(circles) + 1)]
+    for i in range(1, len(slots) + 1):
+        w, half = f"ancho_ranura_{name}_{i}", f"(largo_ranura_{name}_{i} - ancho_ranura_{name}_{i}) / 2"
+        holes.append(f"translate(pos_ranura_{name}_{i}) rotate(ang_ranura_{name}_{i}) hull() {{ "
+                     f"translate([-{half}, 0]) circle(d={w}, $fn=48); translate([{half}, 0]) circle(d={w}, $fn=48); }}")
+    return f"module {name}() {{ offset(delta=holgura) difference() {{ {_polygon(contours)} {' '.join(holes)} }} }}"
+
+
+def _slot_vars(name: str, slots: Sequence[Slot]) -> list[str]:
+    out = []
+    for i, (cx, cy, w, length, ang) in enumerate(slots, 1):
+        out += [f"ancho_ranura_{name}_{i} = {w:.3f};", f"largo_ranura_{name}_{i} = {length:.3f};  // de punta a punta",
+                f"ang_ranura_{name}_{i} = {ang:.1f};", f"pos_ranura_{name}_{i} = [{cx:.3f}, {cy:.3f}];"]
+    return out
 
 
 def _circle_vars(name: str, circles: Sequence[Circle]) -> list[str]:
@@ -59,6 +71,7 @@ def build_scad(
     holgura: float = 0.0,
     altura: float | None = None,
     circles: dict[str, Sequence[Circle]] | None = None,
+    slots: dict[str, Sequence[Slot]] | None = None,
 ) -> str:
     """Devuelve el código OpenSCAD. Con solo `planta` hace una extrusión simple
     de altura `altura`."""
@@ -74,7 +87,7 @@ def build_scad(
     else:
         raise ValueError("indica alzado, perfil o altura")
 
-    circles = circles or {}
+    circles, slots = circles or {}, slots or {}
     margen = 1  # mm extra para que las extrusiones atraviesen por completo
     lines = [
         "// Generado por Scan2Print — editable",
@@ -85,13 +98,14 @@ def build_scad(
         f"margen = {margen};",
     ]
     present = {"planta": planta, "alzado": alzado, "perfil": perfil}
-    var_lines = [v for n, c in present.items() if c for v in _circle_vars(n, circles.get(n, ()))]
+    var_lines = [v for n, c in present.items() if c
+                 for v in _circle_vars(n, circles.get(n, ())) + _slot_vars(n, slots.get(n, ()))]
     if var_lines:
-        lines += ["", "// Agujeros: Ø en mm y posición [x, y] en el plano de cada vista", *var_lines]
+        lines += ["", "// Agujeros y ranuras: medidas en mm y posición [x, y] en el plano de cada vista", *var_lines]
     lines.append("")
     for n, c in present.items():
         if c:
-            lines.append(_view_module(n, c, circles.get(n, ())))
+            lines.append(_view_module(n, c, circles.get(n, ()), slots.get(n, ())))
     lines += ["", "intersection() {"]
     lines.append("  translate([0,0,-margen]) linear_extrude(alto + 2*margen) planta();")
     if alzado:

@@ -1,19 +1,29 @@
 """Crea trabajos de ejemplo en un servidor en marcha: uno listo, uno en revisión y uno con error.
 Uso: PYTHONPATH=server:server/tests python tests/e2e/seed.py http://127.0.0.1:PORT  → imprime los ids en JSON."""
 import json
+import math
 import sys
 import time
 
 import cv2
 import httpx
 import numpy as np
-from synth import photo3d, scene
+from synth import photo, photo3d, scene
 
 from app.views.markers import render_sheet
 
 SHEET = render_sheet()
 A, F, H = 40.0, 20.0, 30.0
 BOXES = {"planta": (85, 138.5, A, F, H), "alzado": (85, 134, A, H, F), "perfil": (95, 134, F, H, A)}
+
+
+def stadium(cx, cy, w, length, n=14):
+    """Polígono (mm sobre la hoja) de una ranura horizontal de ancho `w` y largo total `length`."""
+    half = (length - w) / 2
+    angles = [math.pi * (i / (n - 1) - 0.5) for i in range(n)]
+    right = [(cx + half + w / 2 * math.cos(a), cy + w / 2 * math.sin(a)) for a in angles]
+    left = [(cx - half - w / 2 * math.cos(a), cy - w / 2 * math.sin(a)) for a in angles]
+    return right + left
 
 
 def jpg(img):
@@ -44,11 +54,18 @@ def main(base):
         review = upload(c, "Caja en revisión", photos, review=True)
         review2 = upload(c, "Caja para continuar", photos, review=True)
         clear = upload(c, "Pieza clara", {"planta": scene(SHEET, color=(228, 228, 228))})
+        top = [("rect", 0, (60, 100, 60, 20)), ("poly", 255, stadium(90, 110, 5, 16)), ("circle", 255, (75, 110, 3))]
+        plate = {"planta": photo(SHEET, top), "alzado": photo(SHEET, [("rect", 0, (60, 100, 60, 10))]),
+                 "perfil": photo(SHEET, [("rect", 0, (60, 100, 20, 10))])}
+        holes = upload(c, "Placa con ranura", plate)
         blank = {"planta": np.full((600, 800, 3), 128, np.uint8)}
         error = upload(c, "Foto sin hoja", blank)
-        for job, status in ((done, "done"), (review, "review"), (review2, "review"), (clear, "done"), (error, "error")):
+        expected = ((done, "done"), (holes, "done"), (review, "review"), (review2, "review"), (clear, "done"),
+                    (error, "error"))
+        for job, status in expected:
             wait(c, job, status)
-    print(json.dumps({"done": done, "review": review, "continue": review2, "clear": clear, "error": error}))
+    print(json.dumps({"done": done, "review": review, "continue": review2, "clear": clear, "holes": holes,
+                      "error": error}))
 
 
 if __name__ == "__main__":
