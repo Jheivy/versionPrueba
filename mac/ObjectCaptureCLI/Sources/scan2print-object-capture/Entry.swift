@@ -1,4 +1,5 @@
-// Uso: scan2print-object-capture <carpeta_fotos> <carpeta_salida> [preview|reduced|medium|full|raw]
+// Uso: scan2print-object-capture <carpeta_fotos> <carpeta_salida> [preview|reduced|medium|full|raw] [keep-background]
+// `keep-background`: no enmascara el fondo, para que la hoja de marcadores salga en el modelo (la escala se saca de ella).
 // Reconstruye una malla con la fotogrametría de Apple (RealityKit / Object Capture).
 // Requiere macOS 12+ en Apple Silicon (o GPU con >= 4 GB y raytracing).
 import Foundation
@@ -34,6 +35,7 @@ struct Entry {
             var config = PhotogrammetrySession.Configuration()
             config.sampleOrdering = .unordered
             config.featureSensitivity = .normal
+            if a.count > 4 && a[4] == "keep-background" { config.isObjectMaskingEnabled = false }
             let session = try PhotogrammetrySession(input: input, configuration: config)
             // URL de carpeta => OBJ + MTL + texturas (el backend busca *.obj).
             try session.process(requests: [.modelFile(url: output, detail: detail)])

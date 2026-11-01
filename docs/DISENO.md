@@ -39,7 +39,8 @@ Android (PWA, Chrome)  ──HTTPS LAN──▶  Mac mini: FastAPI (un solo proc
 7. **Cotas con calibre**: tienen prioridad sobre todo lo anterior y reescalan cada vista desde su propio tamaño.
 8. Resultado: `scad_writer.py` escribe un `.scad` legible (variables arriba, `polygon()` por vista) y el sólido es la
    **intersección de las tres extrusiones** (visual hull ortográfico). Ver límites abajo.
-9. Vídeo: escala por una cota (`largo`) o, sin ella, estimada y marcada como tal.
+9. Vídeo: con la hoja de marcadores bajo la pieza la escala sale sola (`scale.py`: marcadores en la textura → semejanza con
+   su posición real, que además da el plano de la mesa); si no, una cota (`largo`) o una escala estimada marcada como tal.
 
 ## Interfaz (PWA en `web/`, sin paso de compilación)
 - **Navegación:** barra inferior flotante (Capturar · Trabajos · Ajustes), router por hash con View Transitions, pantalla de
@@ -79,5 +80,7 @@ retención de 30 días desde el último uso. Detalle y variables de entorno en e
 - Una pieza blanca sobre el papel blanco no se distingue: el contorno sale con poco contraste y la app lo avisa. Sombras muy
   duras y papel no blanco también lo degradan.
 - Solo agujeros circulares (no ranuras ni avellanados); la hoja A4 limita la pieza a ~190 × 277 mm.
-- Ideas: escala automática en vídeo con la hoja en escena, mesa giratoria, ajuste de primitivas sobre la malla, exportar 3MF,
+- La escala automática del vídeo depende de que Object Capture conserve el papel y de que los marcadores se lean en la
+  textura; está probada con mallas sintéticas, no con una reconstrucción real.
+- Ideas: mesa giratoria, ajuste de primitivas sobre la malla, exportar 3MF,
   reparar pieza rota reflejando la mitad sana.

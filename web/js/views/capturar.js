@@ -53,7 +53,7 @@ export function capturar(root) {
       "Planta, alzado y perfil sobre la hoja de marcadores. Ideal para piezas mecánicas, soportes y tapas. Genera un .scad editable.",
       "#/capturar/vistas", "Empezar con 3 vistas", true),
     card(ART_VIDEO, "Vídeo 3D", null,
-      "Gira alrededor de la pieza (30–60 s). Ideal para formas orgánicas. Se reconstruye en el Mac y luego indicas una medida real.",
+      "Gira alrededor de la pieza (30–60 s). Ideal para formas orgánicas. Si la pones sobre la hoja de marcadores, sale a escala real.",
       "#/capturar/video", "Grabar vídeo"),
     h("button", { class: "btn btn-ghost btn-block", onclick: openHelp }, "¿Cómo coloco la hoja de marcadores?")));
   if (!pref("helpSeen", false)) openHelp();

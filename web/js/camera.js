@@ -190,7 +190,7 @@ export function camaraVideo(root) {
     const canRec = stream && window.MediaRecorder;
     const shutter = h("button", { class: "shutter", "aria-label": "Empezar a grabar", onclick: start });
     cam.replaceChildren(video, h("div", { class: "layer" },
-      h("div", { class: "bar" }, closeBtn(), h("div", { class: "title" }, "Vídeo 3D", h("div", { class: "small", style: "font-weight:400" }, "30–60 s girando alrededor de la pieza"))),
+      h("div", { class: "bar" }, closeBtn(), h("div", { class: "title" }, "Vídeo 3D", h("div", { class: "small", style: "font-weight:400" }, "30–60 s alrededor de la pieza, sobre la hoja de marcadores"))),
       h("div", { class: "status" },
         h("div", { class: "hint" }, "Fondo liso · luz difusa · objeto mate"),
         h("div", { class: "hint small" }, "Dos órbitas: a la altura de la pieza y desde arriba")),
