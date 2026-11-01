@@ -149,7 +149,16 @@ export function detalle(root, { id }) {
     const gridBtn = h("button", { "aria-label": "Rejilla de 1 cm", "aria-pressed": "true", onclick: () => { gridOn = !gridOn; gridBtn.setAttribute("aria-pressed", String(gridOn)); viewer?.setGrid(gridOn); } }, icon("grid"));
     let dimsOn = true;
     const dimsBtn = h("button", { "aria-label": "Cotas", "aria-pressed": "true", onclick: () => { dimsOn = !dimsOn; dimsBtn.setAttribute("aria-pressed", String(dimsOn)); haptic("tick"); viewer?.setDims(dimsOn); } }, icon("ruler"));
-    const tools = h("div", { class: "tools" }, h("button", { "aria-label": "Centrar vista", onclick: () => viewer?.resetView() }, icon("reset")), dimsBtn, gridBtn);
+    // Corte: plano perpendicular a X, Y o Z, con deslizador y lado invertible
+    let secAxis = "x", secOn = false, secFlip = false;
+    const secT = h("input", { type: "range", min: "0", max: "100", value: "50", "aria-label": "Posición del corte" });
+    const applySec = () => viewer?.setSection(secOn ? secAxis : null, secT.value / 100, secFlip);
+    const axBtns = ["x", "y", "z"].map((a) => h("button", { "aria-pressed": String(a === secAxis), "aria-label": `Cortar en el eje ${a.toUpperCase()}`, onclick: () => { secAxis = a; axBtns.forEach((b, i) => b.setAttribute("aria-pressed", String("xyz"[i] === a))); haptic("tick"); applySec(); } }, h("i", { class: `ax ${a}` }), a.toUpperCase()));
+    const flipBtn = h("button", { "aria-label": "Invertir el lado del corte", onclick: () => { secFlip = !secFlip; haptic("tick"); applySec(); } }, "⇄");
+    secT.addEventListener("input", applySec);
+    const secPanel = h("div", { class: "section-panel", hidden: true }, h("div", { class: "axes" }, ...axBtns, flipBtn), secT);
+    const cutBtn = h("button", { "aria-label": "Corte para ver el interior", "aria-pressed": "false", onclick: () => { secOn = !secOn; cutBtn.setAttribute("aria-pressed", String(secOn)); secPanel.hidden = !secOn; haptic("tick"); applySec(); } }, icon("cut"));
+    const tools = h("div", { class: "tools" }, h("button", { "aria-label": "Centrar vista", onclick: () => viewer?.resetView() }, icon("reset")), cutBtn, dimsBtn, gridBtn);
     const name = slug(jobName(j));
     const specs = h("div", { class: "specs", role: "group", "aria-label": "Medidas de la pieza" },
       [["ancho", "x", "Ancho"], ["fondo", "y", "Fondo"], ["alto", "z", "Alto"]].map(([k, ax, lab]) => {
@@ -162,7 +171,7 @@ export function detalle(root, { id }) {
       ? h("a", { class: "btn btn-primary", href: fileUrl("pieza.stl"), download: `${name}.stl` }, icon("download"), "Descargar STL")
       : h("a", { class: "btn btn-primary", href: fileUrl("pieza.scad"), download: `${name}.scad` }, icon("download"), "Descargar .scad");
     body.replaceChildren(...[
-      hasStl ? h("div", { class: "viewer" }, h("div", { class: "skeleton" }), canvas, fb, tools) : h("div", { class: "banner" }, icon("alert"), "OpenSCAD no está instalado en el Mac, así que no se generó el STL. Descarga el .scad o instala OpenSCAD."),
+      hasStl ? h("div", { class: "viewer" }, h("div", { class: "skeleton" }), canvas, fb, tools, secPanel) : h("div", { class: "banner" }, icon("alert"), "OpenSCAD no está instalado en el Mac, así que no se generó el STL. Descarga el .scad o instala OpenSCAD."),
       specs,
       mismatchBanner(false),
       j.holes?.length > 0 && h("div", { class: "holes", "aria-label": "Agujeros detectados" },

@@ -7,6 +7,7 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 export function createViewer(canvas) {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.localClippingEnabled = true;
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 10000);
   scene.add(new THREE.HemisphereLight(0xffffff, 0x445566, 1.6));
@@ -21,7 +22,7 @@ export function createViewer(canvas) {
   const stopSpin = setTimeout(() => { controls.autoRotate = false; }, 6000);
   const helpers = new THREE.Group();
   scene.add(helpers);
-  let mesh, radius = 50, raf = 0, alive = true, dimsGroup = null;
+  let mesh, inner, planeViz, size0, radius = 50, raf = 0, alive = true, dimsGroup = null;
   const css = () => getComputedStyle(canvas);
   const fmt = (n) => n.toLocaleString("es", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 
@@ -100,7 +101,13 @@ export function createViewer(canvas) {
       const size = new THREE.Vector3(); geo.boundingBox.getSize(size);
       mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: new THREE.Color(css().getPropertyValue("--accent").trim() || "#f2601a"), roughness: 0.5, metalness: 0.02 }));
       mesh.rotation.x = -Math.PI / 2; // Z (alto) -> arriba
-      scene.add(mesh);
+      inner = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: new THREE.Color(css().getPropertyValue("--accent-ink").trim() || "#b5440a"), side: THREE.BackSide }));
+      inner.rotation.x = mesh.rotation.x; // cara de corte: el interior (caras traseras) se pinta plano
+      scene.add(mesh, inner);
+      size0 = size.clone();
+      planeViz = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ color: new THREE.Color(css().getPropertyValue("--accent").trim() || "#f2601a"), transparent: true, opacity: 0.12, side: THREE.DoubleSide, depthWrite: false }));
+      planeViz.visible = false; planeViz.renderOrder = 9;
+      scene.add(planeViz);
       radius = Math.max(size.x, size.y, size.z) * 0.9;
       const span = Math.max(20, Math.ceil((Math.max(size.x, size.y) * 1.8 + 20) / 10) * 10);
       const grid = new THREE.GridHelper(span, span / 10, new THREE.Color(css().getPropertyValue("--line-strong").trim() || "#bbb"), new THREE.Color(css().getPropertyValue("--line").trim() || "#ddd"));
@@ -117,6 +124,22 @@ export function createViewer(canvas) {
     },
     resetView,
     setGrid(on) { helpers.visible = on; },
+    /** Corte por un plano: axis "x" (ancho), "y" (fondo) o "z" (alto) o null; t 0..1 a lo largo de la pieza; flip invierte el lado. */
+    setSection(axis, t = 0.5, flip = false) {
+      if (!mesh) return;
+      if (!axis) { for (const m of [mesh, inner]) m.material.clippingPlanes = null; planeViz.visible = false; return; }
+      const sz = size0, W = { x: [-sz.x / 2, sz.x / 2], y: [-sz.y / 2, sz.y / 2], z: [0, sz.z] }[axis];
+      const pos = W[0] + (W[1] - W[0]) * t, k = flip ? 1 : -1;
+      // ejes del mundo: X = ancho, Y = alto (Z de la pieza), Z = -fondo (Y de la pieza)
+      const n = axis === "x" ? new THREE.Vector3(k, 0, 0) : axis === "z" ? new THREE.Vector3(0, k, 0) : new THREE.Vector3(0, 0, -k);
+      const plane = new THREE.Plane(n, -n.dot(axis === "x" ? new THREE.Vector3(pos, 0, 0) : axis === "z" ? new THREE.Vector3(0, pos, 0) : new THREE.Vector3(0, 0, -pos)));
+      for (const m of [mesh, inner]) { m.material.clippingPlanes = [plane]; m.material.needsUpdate = true; }
+      const pad = 1.15;
+      planeViz.visible = true; planeViz.rotation.set(0, 0, 0);
+      if (axis === "x") { planeViz.rotation.y = Math.PI / 2; planeViz.scale.set(sz.y * pad, sz.z * pad, 1); planeViz.position.set(pos, sz.z / 2, 0); }
+      else if (axis === "z") { planeViz.rotation.x = Math.PI / 2; planeViz.scale.set(sz.x * pad, sz.y * pad, 1); planeViz.position.set(0, pos, 0); }
+      else { planeViz.scale.set(sz.x * pad, sz.z * pad, 1); planeViz.position.set(0, sz.z / 2, -pos); }
+    },
     setDims(on) { if (dimsGroup) dimsGroup.visible = on; },
     dispose() {
       alive = false;

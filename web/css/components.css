@@ -186,6 +186,12 @@ img.thumb.model { object-fit: contain; padding: 4px; }
 .viewer[data-ready] .skeleton::after { animation: none; }   /* ya no brilla: no gasta CPU */
 .viewer .tools { position: absolute; top: 10px; right: 10px; display: grid; gap: 8px; }
 .viewer .tools button { width: 44px; height: 44px; border-radius: var(--r-m); border: 1px solid var(--line-strong); background: color-mix(in srgb, var(--surface) 86%, transparent); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); color: var(--fg); transition: transform var(--t-fast), color var(--t-med), border-color var(--t-med); }
+.section-panel { position: absolute; left: 10px; right: 64px; bottom: 10px; display: grid; gap: 6px; padding: 8px 10px; border-radius: var(--r-m); border: 1px solid var(--line-strong); background: color-mix(in srgb, var(--surface) 90%, transparent); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
+.section-panel[hidden] { display: none; }
+.section-panel .axes { display: flex; gap: 6px; }
+.section-panel .axes button { flex: 1; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: 1px solid var(--line-strong); border-radius: var(--r-s); background: var(--surface); color: var(--fg); font: 600 .82rem var(--mono); }
+.section-panel .axes button[aria-pressed="true"] { background: var(--ink); color: var(--on-ink); border-color: var(--ink); }
+.section-panel input[type=range] { width: 100%; min-height: 44px; accent-color: var(--accent); }
 .viewer .tools button:active { transform: scale(.9); }
 .viewer .tools button[aria-pressed="true"] { color: var(--accent-ink); border-color: var(--accent); }
 .viewer .fallback { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; padding: 24px; color: var(--muted); }

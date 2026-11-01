@@ -68,7 +68,7 @@ extrusiones, así que se recorta a la vista más pequeña y las medidas mostrada
 
 ## Diseño y rendimiento
 **Diseño** (`web/css/`, `web/js/`): identidad «taller de precisión»: grafito y papel técnico, botón principal de tinta sólida, un único acento naranja
-(color del filamento), IBM Plex Sans y Mono para las cifras (local), cotas sobre el visor 3D, miniaturas con el modelo
+(color del filamento), IBM Plex Sans y Mono para las cifras (local), cotas y corte por plano (X, Y, Z) en el visor 3D, miniaturas con el modelo
 renderizado en el servidor (`GET /api/jobs/{id}/thumb.png`), barra inferior flotante con pastilla de tinta, esqueletos de carga, transiciones entre
 pantallas (View Transitions API, con el sentido según la navegación), hápticos (ajustable en *Ajustes*) y gestos:
 deslizar una tarjeta para borrarla, arrastrar una hoja inferior para cerrarla y tirar de la lista para actualizar.
