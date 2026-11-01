@@ -67,15 +67,16 @@ extrusiones, así que se recorta a la vista más pequeña y las medidas mostrada
 - `job.json` incluye `warnings` (`dim`, `views`, `values`, `diff`); vacío cuando todo cuadra.
 
 ## Diseño y rendimiento
-**Diseño** (`web/css/`, `web/js/`): sistema de tokens claro/oscuro con acento azul→violeta, tipografía Inter (local),
-barra inferior flotante con pastilla animada, tarjetas con profundidad, esqueletos de carga, transiciones entre
+**Diseño** (`web/css/`, `web/js/`): identidad «taller de precisión»: grafito y papel técnico, botón principal de tinta sólida, un único acento naranja
+(color del filamento), IBM Plex Sans y Mono para las cifras (local), cotas sobre el visor 3D, miniaturas con el modelo
+renderizado en el servidor (`GET /api/jobs/{id}/thumb.png`), barra inferior flotante con pastilla de tinta, esqueletos de carga, transiciones entre
 pantallas (View Transitions API, con el sentido según la navegación), hápticos (ajustable en *Ajustes*) y gestos:
 deslizar una tarjeta para borrarla, arrastrar una hoja inferior para cerrarla y tirar de la lista para actualizar.
 Respeta `prefers-reduced-motion`.
 
 **Velocidad, sin paso de compilación:**
 - three.js (minificado) y la fuente se sirven desde el propio Mac (`web/vendor/`, `web/fonts/`): la app ya no
-  necesita internet. Licencias en `web/vendor/LICENSE-three.txt` y `web/fonts/LICENSE-inter-OFL.txt`.
+  necesita internet. Licencias en `web/vendor/LICENSE-three.txt` y `web/fonts/LICENSE-ibm-plex-OFL.txt`.
 - Cada pantalla se carga bajo demanda y, en reposo, las demás se precargan con `modulepreload` (sin ejecutarlas).
 - El servidor comprime (gzip) y cachea: `vendor/` y `fonts/` son inmutables, el resto se revalida con ETag y los
   modelos `…/pieza.stl?v=<rev>` son inmutables (la revisión cambia al regenerar).

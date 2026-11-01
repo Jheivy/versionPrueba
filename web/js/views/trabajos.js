@@ -1,5 +1,5 @@
 import { api, del } from "../api.js";
-import { confirmSheet, fmtDims, h, haptic, icon, jobName, modeLabel, pullToRefresh, relTime, statusChip, swipeToDelete, toast } from "../ui.js";
+import { confirmSheet, fmt, h, haptic, icon, jobName, modeLabel, pullToRefresh, relTime, statusChip, swipeToDelete, toast } from "../ui.js";
 
 const FILTERS = [["all", "Todos"], ["run", "En curso"], ["done", "Listos"], ["error", "Error"]];
 const group = (s) => (s === "done" ? "done" : s === "error" ? "error" : "run");
@@ -24,15 +24,20 @@ export function trabajos(root) {
   };
 
   const row = (j) => {
-    const thumb = h("img", { class: "thumb", src: `/api/jobs/${j.id}/thumb.jpg`, alt: "", loading: "lazy", decoding: "async" });
-    thumb.addEventListener("error", () => thumb.replaceWith(h("span", { class: "thumb" }, icon(j.mode === "video" ? "film" : "cube"))));
+    const hasModel = j.status === "done" && j.outputs?.includes("pieza.stl");
+    const photo = `/api/jobs/${j.id}/thumb.jpg`;
+    const thumb = h("img", { class: "thumb" + (hasModel ? " model" : ""), src: hasModel ? `/api/jobs/${j.id}/thumb.png?v=${j.rev || 0}` : photo, alt: "", loading: "lazy", decoding: "async" });
+    thumb.addEventListener("error", () => {                       // sin render del modelo: la foto; sin foto: un icono
+      if (thumb.src.includes("thumb.png")) { thumb.classList.remove("model"); thumb.src = photo; }
+      else thumb.replaceWith(h("span", { class: "thumb" }, icon(j.mode === "video" ? "film" : "cube")));
+    });
     const card = h("div", { class: "card job" },
       h("a", { href: `#/trabajos/${j.id}`, "aria-label": `Abrir ${jobName(j)}`, onclick: () => haptic("tick") },
         thumb,
         h("div", { style: "min-width:0" },
           h("div", { class: "name" }, jobName(j)),
           h("div", { class: "meta muted small" }, h("span", {}, modeLabel(j.mode)), h("span", { "aria-hidden": "true" }, "·"), h("span", {}, relTime(j.created))),
-          h("div", { class: "meta" }, statusChip(j.status), j.dims && h("span", { class: "small num muted" }, fmtDims(j.dims))))),
+          h("div", { class: "meta" }, statusChip(j.status), j.dims && h("span", { class: "dimline" }, `${fmt(j.dims.ancho)} × ${fmt(j.dims.fondo)} × ${fmt(j.dims.alto)}`)))),
       h("button", { class: "icon-btn", style: "color:var(--muted)", "aria-label": `Eliminar ${jobName(j)}`, onclick: () => remove(j) }, icon("trash")));
     const wrap = h("div", { class: "swipe" }, h("div", { class: "swipe-action", "aria-hidden": "true" }, icon("trash")), card);
     swipeToDelete(wrap, card, (reset) => remove(j, reset));

@@ -29,6 +29,7 @@ from .views.detect import analyze
 from .views.markers import render_sheet
 from .views.preview import render_preview
 from .views.rectify import MarkersNotFound
+from .views.render import render_model
 
 STORAGE = Path(os.environ.get("SCAN2PRINT_STORAGE", Path.home() / "Scan2Print" / "jobs"))
 WEB_DIR = Path(__file__).resolve().parents[2] / "web"
@@ -334,6 +335,21 @@ def thumb(job_id: str):
         else:
             raise HTTPException(404, "sin miniatura")
     return FileResponse(t, headers={"Cache-Control": "max-age=3600"})
+
+
+@app.get("/api/jobs/{job_id}/thumb.png")
+def thumb_model(job_id: str, request: Request):
+    """Render de la pieza terminada (si no hay modelo, 404 y la app usa la foto). Con ?v=<rev> es inmutable."""
+    d = _job_dir(job_id)
+    stl = d / "output" / "pieza.stl"
+    if not stl.is_file():
+        raise HTTPException(404, "sin modelo")
+    cache = d / "thumb-model.png"
+    if not cache.exists() or cache.stat().st_mtime < stl.stat().st_mtime:
+        cache.write_bytes(render_model(stl))
+    versioned = "v" in request.query_params
+    return FileResponse(cache, media_type="image/png", headers={
+        "Cache-Control": "public, max-age=31536000, immutable" if versioned else "no-cache"})
 
 
 @app.post("/api/detect")

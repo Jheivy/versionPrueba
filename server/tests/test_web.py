@@ -21,7 +21,7 @@ def test_service_worker_is_generated_from_the_real_files():
     shell = json.loads(re.search(r"const SHELL = (\[.*?\]);", src, re.S).group(1))
     vendor = json.loads(re.search(r"const VENDOR = (\[.*?\]);", src, re.S).group(1))
     assert {"./", "index.html", "js/app.js", "css/components.css", "js/views/detalle.js", "js/image.js"} <= set(shell)
-    assert "vendor/three-0.160.0.module.min.js" in vendor and "fonts/inter-latin.woff2" in vendor
+    assert "vendor/three-0.160.0.module.min.js" in vendor and "fonts/ibm-plex-sans-latin-400-normal.woff2" in vendor
     for f in shell[1:] + vendor:
         assert (WEB / f).is_file(), f"{f} está en el service worker pero no existe"
 
@@ -48,7 +48,7 @@ def test_cache_headers_and_gzip():
         assert three.headers["content-encoding"] == "gzip"
         on_the_wire = sum(len(chunk) for chunk in three.iter_raw())
     assert on_the_wire < 220_000  # 671 kB sin comprimir -> ~166 kB por el cable
-    assert client.get("/fonts/inter-latin.woff2").headers["cache-control"].endswith("immutable")
+    assert client.get("/fonts/ibm-plex-mono-latin-500-normal.woff2").headers["cache-control"].endswith("immutable")
     for path in ("/", "/js/app.js", "/css/components.css"):
         assert client.get(path).headers["cache-control"] == "no-cache"
 

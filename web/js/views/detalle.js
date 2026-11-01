@@ -1,5 +1,5 @@
 import { api, authFetch, del, patch, post, pref, upload } from "../api.js";
-import { animateValue, confirmSheet, fmt, fmtDims, h, haptic, icon, jobName, openSheet, pickFile, slug, toast, topBar } from "../ui.js";
+import { animateValue, confirmSheet, fmt, h, haptic, icon, jobName, modeLabel, note, openSheet, pickFile, relTime, slug, statusChip, toast, topBar } from "../ui.js";
 import { prepareImage } from "../image.js";
 import { navigate } from "../router.js";
 
@@ -9,7 +9,7 @@ const STEPS = {
 };
 const VIEW_LABEL = { planta: "Planta", alzado: "Alzado", perfil: "Perfil" };
 const DIM_LABEL = { ancho: "Ancho (X)", fondo: "Fondo (Y)", alto: "Alto (Z)" };
-const holeName = (x) => `Ø${fmt(x.diam)} mm · ${VIEW_LABEL[x.view].toLowerCase()} ${x.n}`;
+const holeName = (x) => `Ø${fmt(x.diam)} · ${VIEW_LABEL[x.view].toLowerCase()} ${x.n}`;
 const mmss = (ms) => { const s = Math.max(0, Math.round(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };
 
 export function detalle(root, { id }) {
@@ -38,7 +38,8 @@ export function detalle(root, { id }) {
     if ((last === "processing" || last === "uploaded") && j.status === "error") haptic("error");
     last = j.status;
     viewer?.dispose(); viewer = null;
-    head.replaceChildren(topBar(jobName(j), { actions: [h("button", { class: "icon-btn", "aria-label": "Opciones", onclick: openMenu }, icon("more"))] }));
+    head.replaceChildren(topBar(jobName(j), { actions: [h("button", { class: "icon-btn", "aria-label": "Opciones", onclick: openMenu }, icon("more"))] }),
+      h("div", { class: "sub" }, statusChip(j.status), h("span", {}, modeLabel(j.mode)), h("span", { "aria-hidden": "true" }, "·"), h("span", {}, relTime(j.created))));
     if (j.status === "uploaded" || j.status === "processing") { progress(); timer = setTimeout(load, j.mode === "video" ? 4000 : 1500); }
     else if (j.status === "review") review();
     else if (j.status === "error") failed();
@@ -80,14 +81,14 @@ export function detalle(root, { id }) {
 
   function mismatchBanner(inReview) {
     if (!j.warnings?.length) return null;
-    return h("div", { class: "banner", role: "alert" }, icon("alert"), h("div", { class: "stack", style: "gap:6px" },
-      h("b", {}, j.warnings.length > 1 ? "Varias medidas no cuadran entre las vistas" : "Una medida no cuadra entre las vistas"),
-      ...j.warnings.map((w) => h("div", { class: "small num" },
-        `${DIM_LABEL[w.dim]}: ${VIEW_LABEL[w.views[0]].toLowerCase()} ${fmt(w.values[0])} mm · ${VIEW_LABEL[w.views[1]].toLowerCase()} ${fmt(w.values[1])} mm (difieren ${fmt(w.diff)})`)),
-      h("div", { class: "small" }, inReview
+    const n = j.warnings.length;
+    return note("warn", n > 1 ? `${n} medidas no cuadran entre las vistas` : "Una medida no cuadra entre las vistas",
+      ...j.warnings.map((w) => h("div", { class: "row-m" }, h("b", {}, DIM_LABEL[w.dim]),
+        h("span", { class: "mono" }, `${VIEW_LABEL[w.views[0]].toLowerCase()} ${fmt(w.values[0])} · ${VIEW_LABEL[w.views[1]].toLowerCase()} ${fmt(w.values[1])} mm`))),
+      h("p", { class: "small muted", style: "margin:4px 0 0" }, inReview
         ? "El modelo se recorta a la vista más pequeña. Repite la foto que falle o unifica con el promedio."
         : "El modelo se recortó a la vista más pequeña. Mide con calibre en «Ajustar medidas» o unifica con el promedio."),
-      h("button", { class: "btn", onclick: unify }, "Unificar (promedio)")));
+      h("button", { class: "btn btn-sm", style: "justify-self:start", onclick: unify }, "Unificar (promedio)"));
   }
 
   /* ---------- Revisión de contornos ---------- */
@@ -99,15 +100,16 @@ export function detalle(root, { id }) {
   }
 
   function viewCard(v) {
-    const info = h("span", { class: "muted small num" });
+    const info = h("span", { class: "mono muted small", style: "white-space:nowrap;font-size:.7rem" });
     const img = h("img", { alt: `Contorno detectado en ${VIEW_LABEL[v]}` });
     const card = h("div", { class: "card review stack" },
-      h("div", { class: "row" }, h("strong", { class: "grow" }, VIEW_LABEL[v]), info), img,
-      h("button", { class: "btn btn-block", onclick: () => retake(v) }, icon("camera"), "Repetir foto"));
+      h("div", { class: "row", style: "gap:10px" }, h("strong", {}, VIEW_LABEL[v]), info, h("span", { class: "grow" }),
+        h("button", { class: "btn btn-sm btn-ghost", "aria-label": `Repetir la foto de ${VIEW_LABEL[v].toLowerCase()}`, onclick: () => retake(v) }, icon("camera"), "Repetir")),
+      img);
     authFetch(`/api/jobs/${id}/preview/${v}.png`).then(async (r) => {
       if (!r.ok) throw new Error();
       const i = JSON.parse(r.headers.get("X-Preview-Info"));
-      info.textContent = `${fmt(i.ancho)} × ${fmt(i.alto)} mm · ${i.huecos} ${i.huecos === 1 ? "hueco" : "huecos"}`;
+      info.textContent = `${fmt(i.ancho)} × ${fmt(i.alto)} · ${i.huecos} ${i.huecos === 1 ? "hueco" : "huecos"}`;
       img.src = URL.createObjectURL(await r.blob());
     }).catch(() => img.replaceWith(h("div", { class: "banner err" }, icon("alert"), "No se detectó la hoja o la pieza en esta foto. Repítela.")));
     return card;
@@ -120,7 +122,9 @@ export function detalle(root, { id }) {
       haptic("tap"); try { await post(`/jobs/${id}/confirm`); load(); } catch (e) { go.disabled = false; toast(e.message, { kind: "err" }); }
     } }, "Continuar");
     body.replaceChildren(...[
-      h("p", { class: "muted" }, "Comprueba que el contorno azul sigue bien la pieza y los agujeros (naranja). Las rectas ya están enderezadas. Si algo no cuadra, repite la foto."),
+      h("div", { class: "stack", style: "gap:6px" }, h("h2", { style: "margin:0" }, "Revisa los contornos"),
+        h("div", { class: "legend" }, h("span", {}, h("i", { style: "background:var(--accent)" }), "Contorno"), h("span", {}, h("i", { style: "background:#18a5c9" }), "Agujeros"),
+          h("span", {}, "Rectas ya enderezadas"))),
       mismatchBanner(true),
       ...views.map(viewCard),
       h("div", { class: "actionbar", style: "grid-template-columns:1fr" }, go)].filter(Boolean));
@@ -143,24 +147,27 @@ export function detalle(root, { id }) {
     const fb = h("div", { class: "fallback", hidden: true }, "No se pudo cargar el visor 3D. Puedes descargar el archivo igualmente.");
     let gridOn = true;
     const gridBtn = h("button", { "aria-label": "Rejilla de 1 cm", "aria-pressed": "true", onclick: () => { gridOn = !gridOn; gridBtn.setAttribute("aria-pressed", String(gridOn)); viewer?.setGrid(gridOn); } }, icon("grid"));
-    const tools = h("div", { class: "tools" }, h("button", { "aria-label": "Centrar vista", onclick: () => viewer?.resetView() }, icon("reset")), gridBtn);
+    let dimsOn = true;
+    const dimsBtn = h("button", { "aria-label": "Cotas", "aria-pressed": "true", onclick: () => { dimsOn = !dimsOn; dimsBtn.setAttribute("aria-pressed", String(dimsOn)); haptic("tick"); viewer?.setDims(dimsOn); } }, icon("ruler"));
+    const tools = h("div", { class: "tools" }, h("button", { "aria-label": "Centrar vista", onclick: () => viewer?.resetView() }, icon("reset")), dimsBtn, gridBtn);
     const name = slug(jobName(j));
-    const dimsEl = h("strong", { class: "num" }, fmtDims(j.dims));
-    if (!dimsShown && j.dims) {                              // las medidas "cuentan" hasta su valor la primera vez
-      dimsShown = true;
-      animateValue(dimsEl, (e) => fmtDims({ ancho: j.dims.ancho * e, fondo: j.dims.fondo * e, alto: j.dims.alto * e }));
-    }
+    const specs = h("div", { class: "specs", role: "group", "aria-label": "Medidas de la pieza" },
+      [["ancho", "x", "Ancho"], ["fondo", "y", "Fondo"], ["alto", "z", "Alto"]].map(([k, ax, lab]) => {
+        const val = j.dims?.[k] ?? 0, numEl = h("span", {}, fmt(val));
+        if (!dimsShown && j.dims) animateValue(numEl, (e) => fmt(val * e));   // las medidas «cuentan» hasta su valor la primera vez
+        return h("div", { class: "spec" }, h("span", { class: "k" }, h("i", { class: `ax ${ax}` }), lab), h("span", { class: "v" }, numEl, h("small", {}, "mm")));
+      }));
+    dimsShown = true;
     const primary = hasStl
       ? h("a", { class: "btn btn-primary", href: fileUrl("pieza.stl"), download: `${name}.stl` }, icon("download"), "Descargar STL")
       : h("a", { class: "btn btn-primary", href: fileUrl("pieza.scad"), download: `${name}.scad` }, icon("download"), "Descargar .scad");
     body.replaceChildren(...[
       hasStl ? h("div", { class: "viewer" }, h("div", { class: "skeleton" }), canvas, fb, tools) : h("div", { class: "banner" }, icon("alert"), "OpenSCAD no está instalado en el Mac, así que no se generó el STL. Descarga el .scad o instala OpenSCAD."),
-      h("div", { class: "dims" }, h("div", {}, dimsEl, h("div", { class: "muted small" }, "Ancho × fondo × alto")),
-        h("span", { class: "chip ok" }, icon("check"), "Listo")),
+      specs,
       mismatchBanner(false),
       j.holes?.length > 0 && h("div", { class: "holes", "aria-label": "Agujeros detectados" },
-        h("div", { class: "muted small" }, `${j.holes.length} ${j.holes.length === 1 ? "agujero detectado" : "agujeros detectados"}`),
-        h("div", { class: "chips" }, j.holes.map((x) => h("span", { class: "chip" }, holeName(x), x.std && h("span", { class: "muted" }, ` · posible ${x.std}`))))),
+        h("div", { class: "eyebrow", style: "margin:2px 0 8px" }, `${j.holes.length} ${j.holes.length === 1 ? "agujero" : "agujeros"}`),
+        h("div", { class: "chips" }, j.holes.map((x) => h("span", { class: "chip mono" }, holeName(x), x.std && h("span", { class: "muted" }, ` ${x.std}?`))))),
       j.mesh?.scale_estimated && h("div", { class: "banner info" }, icon("ruler"), h("div", {}, "Escala estimada. Mide la dimensión más larga con un calibre e indícala para ajustar el tamaño real. ",
         h("button", { class: "btn", style: "margin-top:8px", onclick: openAdjust }, "Indicar medida"))),
       j.mesh && !j.mesh.watertight && h("div", { class: "banner" }, icon("alert"), "La malla tiene pequeños huecos. Orca suele repararlos al importar."),
@@ -179,8 +186,9 @@ export function detalle(root, { id }) {
   /* ---------- Ajustar medidas ---------- */
   function openAdjust() {
     const p = j.params || {}, det = j.detected || {};
-    const num = (name, label, ph, step = "0.1") => h("label", { class: "field" }, label,
-      h("input", { name, type: "number", inputMode: "decimal", step, min: name === "holgura" ? undefined : "0", placeholder: ph, value: p[name] ?? "" }));
+    const num = (name, label, ph, axis, step = "0.1") => h("label", { class: "mfield" },
+      h("span", { class: "lab" }, axis ? h("i", { class: `ax ${axis}` }) : null, label),
+      h("span", { class: "inp" }, h("input", { name, type: "number", inputMode: "decimal", step, min: name === "holgura" ? undefined : "0", placeholder: ph, value: p[name] ?? "" }), h("em", {}, "mm")));
     const holgura = h("input", { name: "holgura", type: "number", inputMode: "decimal", step: "0.05", value: p.holgura ?? 0, "aria-label": "Holgura en mm" });
     const bump = (d) => { holgura.value = (Math.round((Number(holgura.value || 0) + d) * 100) / 100).toString(); };
     const presets = h("div", { class: "chips" }, [["Exacto", 0], ["Ajustado", 0.1], ["Holgado", 0.2]].map(([t, v]) =>
@@ -197,15 +205,15 @@ export function detalle(root, { id }) {
       try { await post(`/jobs/${id}/params`, b); toast("Regenerando…"); setTimeout(load, 500); } catch (er) { toast(er.message, { kind: "err" }); }
     } },
       j.mode === "video"
-        ? [num("largo", "Dimensión más larga (mm)", j.dims ? fmt(Math.max(j.dims.ancho, j.dims.fondo, j.dims.alto)) : "mm"),
+        ? [num("largo", "Dimensión más larga", j.dims ? fmt(Math.max(j.dims.ancho, j.dims.fondo, j.dims.alto)) : "0,0"),
            h("label", { class: "field" }, "Detalle de la reconstrucción", h("select", { name: "detalle" },
              [["medium", "Medio"], ["full", "Alto (más lento)"], ["reduced", "Bajo (rápido)"]].map(([v, t]) => h("option", { value: v, selected: (p.detalle || "medium") === v }, t))))]
-        : [h("div", { class: "field-grid" }, num("ancho", "Ancho X", fmt(det.ancho ?? 0)), num("fondo", "Fondo Y", fmt(det.fondo ?? 0)), num("alto", "Alto Z", fmt(det.alto ?? 0))),
-           ...(j.holes || []).map((x) => num(`d_${x.view}_${x.n}`, `Ø agujero (${VIEW_LABEL[x.view].toLowerCase()} ${x.n})`, fmt(x.diam), "0.05")),
+        : [h("div", { class: "field-grid" }, num("ancho", "Ancho", fmt(det.ancho ?? 0), "x"), num("fondo", "Fondo", fmt(det.fondo ?? 0), "y"), num("alto", "Alto", fmt(det.alto ?? 0), "z")),
+           ...(j.holes || []).map((x) => num(`d_${x.view}_${x.n}`, `Ø ${VIEW_LABEL[x.view].toLowerCase()} ${x.n}`, fmt(x.diam), null, "0.05")),
            h("label", { class: "toggle" }, h("span", {}, h("b", {}, "Enderezar contornos"), h("br"),
              h("span", { class: "muted small" }, "Rectas y ángulos de 90° exactos (hasta ~4° de desvío)")),
              h("input", { type: "checkbox", name: "enderezar", checked: (p.enderezar ?? 1) !== 0 })),
-           h("div", { class: "field" }, "Holgura (mm)", h("div", { class: "stepper" },
+           h("div", { class: "mfield" }, h("span", { class: "lab" }, "Holgura", h("span", { class: "hint" }, "+ agranda · − encoge")), h("div", { class: "stepper" },
              h("button", { type: "button", class: "btn", "aria-label": "Menos", onclick: () => bump(-0.05) }, "−"), holgura,
              h("button", { type: "button", class: "btn", "aria-label": "Más", onclick: () => bump(0.05) }, "+")), presets)],
       h("p", { class: "muted small", style: "margin:0" }, j.holes?.length ? "Deja vacío lo que no hayas medido. Mide los agujeros con calibre: la foto tiene ±0,1 mm de error." : "Deja vacío lo que no hayas medido."),
