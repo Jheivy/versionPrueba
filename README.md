@@ -66,6 +66,19 @@ extrusiones, así que se recorta a la vista más pequeña y las medidas mostrada
 - O repetir la foto que falle desde la revisión.
 - `job.json` incluye `warnings` (`dim`, `views`, `values`, `diff`); vacío cuando todo cuadra.
 
+## Corrección de paralaje
+La hoja se rectifica con el plano del papel, pero la cara superior de la pieza está más cerca de la cámara y se ve
+más grande (una pieza de 4 cm con la cámara a 30 cm: +15 %). `views/parallax.py` estima la distancia y el punto bajo la
+cámara a partir de la homografía de la hoja (focal del EXIF o la típica de un móvil, 26 mm equivalentes) y deshace ese
+factor con la profundidad de cada vista, que sale de las otras (3 iteraciones). Con tres vistas y la cámara a 25–45 cm
+recupera 40×20×30 mm con ±1,2 mm (sin corregir: +7 a +11 %).
+- Se muestra en el resultado («Perspectiva corregida, hasta −x %») y en `job.json` (`parallax`: distancia y factor por vista).
+- Se puede desactivar en *Ajustar medidas → Corregir perspectiva* (`paralaje: 0`) o con `SCAN2PRINT_PARALLAX=off`.
+- La cámara avisa «aleja la cámara o usa zoom» por debajo de 25 cm (`distance` en `/api/detect`).
+- Límites: si la pieza no está centrada bajo la cámara, el borde cercano se ve por su base y queda un residuo (~1 mm en
+  piezas de 4 cm); una focal muy distinta de la supuesta (p. ej. gran angular) falsea la distancia, y una cota medida con
+  calibre siempre manda. Para el mejor resultado: centra la pieza, aleja el móvil y usa zoom 2×.
+
 ## Límites y limpieza
 - **Subida:** foto máx. 40 MB (`SCAN2PRINT_MAX_PHOTO_MB`), vídeo máx. 1500 MB (`SCAN2PRINT_MAX_VIDEO_MB`), hasta 400 ficheros
   (`SCAN2PRINT_MAX_FILES`). Se guarda en bloques y, si se pasa, responde 413 sin dejar restos; las peticiones desmesuradas se

@@ -15,7 +15,7 @@ from pathlib import Path
 import cv2
 
 from . import jobs
-from .views import coherence
+from .views import coherence, parallax
 from .views.contours import NoShapeFound, extract
 from .views.holes import finalize, split_circles
 from .views.rectify import MarkersNotFound, rectify
@@ -25,7 +25,7 @@ from .views.scad_writer import build_scad
 PX = 10.0
 OUT_DIR = Path(os.environ.get("SCAN2PRINT_OUT", Path.home() / "Scan2Print" / "out"))
 WEBHOOK = os.environ.get("SCAN2PRINT_WEBHOOK")  # URL que recibe un POST JSON al terminar
-PARAM_KEYS = ("ancho", "fondo", "alto", "holgura", "enderezar", "unificar")  # cotas (mm), holgura, flags 0/1
+PARAM_KEYS = ("ancho", "fondo", "alto", "holgura", "enderezar", "unificar", "paralaje")  # cotas, holgura, flags 0/1
 HOLE_KEY = re.compile(r"d_(planta|alzado|perfil)_(\d+)")  # Ø medido de un agujero, p. ej. d_planta_1
 
 
@@ -84,6 +84,31 @@ def _scale_circles(circles, sx, sy):
     return [(cx * sx, cy * sy, (d - 1 / PX) * math.sqrt(sx * sy)) for cx, cy, d in circles]
 
 
+def _fix_parallax(views, circles, origins, poses, params) -> dict:
+    """Deshace el agrandamiento por perspectiva de la cara superior (ver views/parallax.py). Modifica
+    `views` y `circles` y devuelve, por vista, la distancia de la cámara y el factor aplicado."""
+    raw = coherence.sizes(views)
+    known = {dim: params[dim] for dim in ("ancho", "fondo", "alto") if dim in params}   # cotas medidas con calibre
+    dims = {}
+    for _ in range(3):   # la profundidad de cada vista sale de las otras: se refina en pocas vueltas
+        ks = {}
+        for v, pose in poses.items():
+            depth = parallax.depths({**dims, **known}).get(v, 0.0)
+            ks[v] = (parallax.factor(depth, pose["dist"]) if pose and depth else None) or 1.0
+        fixed = {v: (raw[v][0] * ks[v], raw[v][1] * ks[v]) for v in raw}
+        dims = {dim: sum(x for _, x in vals) / len(vals)
+                for dim, vals in coherence.shared_dims(fixed).items() if vals}
+    info = {}
+    for v, k in ks.items():
+        pose = poses[v]
+        if pose is None:
+            continue
+        info[v] = {"dist": round(pose["dist"]), "factor": round(k, 3)}
+        if k != 1.0:
+            views[v], circles[v] = parallax.correct(views[v], circles[v], origins[v], pose["nadir"], k)
+    return info
+
+
 def process_views(d: Path, params: dict | None = None, pause_for_review: bool = False) -> None:
     """Procesa las fotos de `input/`. `params` admite ancho/fondo/alto (cotas medidas
     con calibre, mm; reescalan la pieza) y holgura (offset de contorno, mm)."""
@@ -92,7 +117,7 @@ def process_views(d: Path, params: dict | None = None, pause_for_review: bool = 
             params = {k: float(v) for k, v in (params or {}).items()
                       if (k in PARAM_KEYS or HOLE_KEY.fullmatch(k)) and v not in (None, "")}
             _set(d, status="processing", error=None, error_view=None)
-            views, circles = {}, {}
+            views, circles, origins, poses = {}, {}, {}, {}
             for p in sorted((d / "input").iterdir()):
                 name = p.name.split("_", 1)[0]
                 if name in ("planta", "alzado", "perfil"):
@@ -101,25 +126,30 @@ def process_views(d: Path, params: dict | None = None, pause_for_review: bool = 
                         raise ViewError(name, f"No se pudo leer la foto de {name}. Vuelve a hacerla.")
                     _step(d, "rectifying")
                     try:
-                        sheet = rectify(img, PX)
+                        sheet, h_mm = rectify(img, PX, return_h=True)
                     except MarkersNotFound:
                         raise ViewError(name, f"No vi la hoja de marcadores en la foto de {name}. "
                                               "Encuádrala entera y con buena luz.")
                     _step(d, "contours")
                     try:
-                        views[name], circles[name] = split_circles(extract(sheet, PX))
+                        polys, origins[name] = extract(sheet, PX, return_origin=True)
+                        views[name], circles[name] = split_circles(polys)
+                        poses[name] = parallax.camera_pose(h_mm, img.shape, parallax.focal_35(p))
                     except NoShapeFound:
                         raise ViewError(name, f"No encontré la pieza en la foto de {name}. "
                                               "Colócala sobre la hoja con fondo claro.")
             if "planta" not in views:
                 raise ViewError("planta", "Falta la foto de planta.")
+            info = {}
+            if parallax.enabled() and params.get("paralaje", 1.0) != 0:
+                info = _fix_parallax(views, circles, origins, poses, params)
             if params.get("enderezar", 1.0) != 0:  # antes de medir: las revisiones y el modelo ven lo mismo
                 for name in views:
                     views[name], (dx, dy) = regularize_view(views[name])
                     circles[name] = [(cx - dx, cy - dy, dm) for cx, cy, dm in circles[name]]
             sizes = coherence.sizes(views)
             if pause_for_review:
-                _set(d, status="review", step="review", warnings=coherence.check(sizes))
+                _set(d, status="review", step="review", warnings=coherence.check(sizes), parallax=info)
                 return
             _step(d, "modeling")
 
@@ -163,7 +193,7 @@ def process_views(d: Path, params: dict | None = None, pause_for_review: bool = 
             exported = _export(d, d.name)
             rev = time.time_ns() // 1_000_000  # nueva revisión: invalida las cachés del navegador
             _set(d, status="done", rev=rev, step=None, outputs=outputs, detected=detected, params=params,
-                 dims=dims, holes=holes, warnings=warnings, exported=exported)
+                 dims=dims, holes=holes, warnings=warnings, parallax=info, exported=exported)
             _notify({"event": "job.done", "id": d.name, "dims": dims, "files": exported})
         except ViewError as e:
             _set(d, status="error", step=None, error=str(e), error_view=e.view)
