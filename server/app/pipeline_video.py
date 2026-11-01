@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import shutil
 import subprocess
@@ -14,6 +15,8 @@ from . import jobs
 from .photogrammetry.frames import extract_frames
 from .photogrammetry.mesh import postprocess
 from .pipeline import _export, _notify, _set, _step
+
+log = logging.getLogger("scan2print")
 
 IMAGE_EXT = {".jpg", ".jpeg", ".png", ".heic"}
 
@@ -89,4 +92,5 @@ def process_video(d: Path, params: dict | None = None) -> None:
                  dims=dims, mesh=mesh, exported=exported)
             _notify({"event": "job.done", "id": d.name, "dims": dims, "files": exported})
         except Exception as e:
-            _set(d, status="error", step=None, error=str(e))
+            log.exception("el trabajo de vídeo %s falló", d.name)
+            _set(d, status="error", step=None, error=str(e) or type(e).__name__)

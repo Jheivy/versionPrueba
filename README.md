@@ -86,6 +86,14 @@ recupera 40×20×30 mm con ±1,2 mm (sin corregir: +7 a +11 %).
 - **Limpieza:** los trabajos sin tocar en 30 días (`SCAN2PRINT_RETENTION_DAYS`, `0` = nunca) se borran al arrancar y cada 6 h;
   nunca los que se están procesando. Los archivos ya exportados a `SCAN2PRINT_OUT` no se tocan.
   *Ajustes → Almacenamiento* muestra el espacio usado y permite borrar a mano (`GET /api/storage`, `POST /api/storage/cleanup`).
+  Abrir un trabajo cuenta como usarlo: solo se borran los que llevan 30 días sin abrirse ni editarse.
+- **Tope de disco:** 20 GB para todos los trabajos (`SCAN2PRINT_MAX_STORAGE_GB`, `0` = sin tope). Antes de aceptar una subida
+  que no cabe se borran los trabajos inactivos más antiguos; si ni así cabe, 507. Nunca se tocan los que se procesan.
+- **Cuerpos sin `Content-Length`:** un middleware cuenta los bytes recibidos y corta con 413 al pasar el tope, sin llenar `/tmp`.
+- **Exportaciones:** regenerar una pieza sustituye su `.stl`/`.scad` en `SCAN2PRINT_OUT` en vez de acumular copias.
+- **Registro:** el servidor escribe en el log (`SCAN2PRINT_LOG=DEBUG|INFO|…`) las trazas de cada fallo y el stderr de OpenSCAD;
+  la app solo muestra una frase clara. Funciona con **un solo proceso** (avisa si `WEB_CONCURRENCY` > 1).
+- **Dependencias:** `server/requirements.txt` fija rangos compatibles y `server/requirements.lock` las versiones exactas probadas.
 
 ## Diseño y rendimiento
 **Diseño** (`web/css/`, `web/js/`): identidad «taller de precisión»: grafito y papel técnico, botón principal de tinta sólida, un único acento naranja

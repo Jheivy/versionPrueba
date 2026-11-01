@@ -5,6 +5,7 @@ import asyncio
 import hashlib
 import io
 import json
+import logging
 import os
 import re
 import shutil
@@ -31,6 +32,7 @@ from .views.preview import render_preview
 from .views.rectify import MarkersNotFound
 from .views.render import render_model
 
+log = logging.getLogger("scan2print")
 STORAGE = Path(os.environ.get("SCAN2PRINT_STORAGE", Path.home() / "Scan2Print" / "jobs"))
 WEB_DIR = Path(__file__).resolve().parents[2] / "web"
 MODES = {"views", "video"}
@@ -69,6 +71,11 @@ async def _sweep() -> None:
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    if not logging.getLogger().handlers:
+        logging.basicConfig(level=os.environ.get("SCAN2PRINT_LOG", "INFO").upper(),
+                            format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    if int(os.environ.get("WEB_CONCURRENCY") or 1) > 1:
+        log.warning("Varios procesos: los trabajos en curso se controlan en memoria; usa un solo proceso")
     jobs.recover_stale(STORAGE)
     if auth.enabled() and not auth.has_devices():     # primer arranque: enseña cómo emparejar el primer móvil
         try:
@@ -89,6 +96,7 @@ async def lifespan(_: FastAPI):
 # sin documentación interactiva pública (/docs, /openapi.json)
 app = FastAPI(title="Scan2Print", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
 app.add_middleware(GZipMiddleware, minimum_size=1024)  # JS/CSS/JSON/STL de texto: 3-5x menos bytes por Wi-Fi
+app.add_middleware(storage.BodyLimit)   # el más externo: corta las subidas desmesuradas antes de leerlas
 
 
 def _job_dir(job_id: str) -> Path:
@@ -206,6 +214,7 @@ def _enqueue(background: BackgroundTasks, d: Path, fn, *args) -> None:
 
 @app.post("/api/jobs", status_code=201)
 async def create_job(
+    request: Request,
     background: BackgroundTasks,
     mode: str = Form(...),
     files: list[UploadFile] = File(...),
@@ -223,6 +232,7 @@ async def create_job(
             raise HTTPException(400, "indica una vista (planta/alzado/perfil) por fichero")
 
     storage.check_count(len(files))
+    storage.make_room(STORAGE, int(request.headers.get("content-length") or 0))
     job_id = uuid.uuid4().hex
     d = STORAGE / job_id / "input"
     d.mkdir(parents=True)
@@ -284,7 +294,9 @@ def list_jobs():
 
 @app.get("/api/jobs/{job_id}")
 def get_job(job_id: str):
-    return _read_job(_job_dir(job_id))
+    d = _job_dir(job_id)
+    storage.touch(d)    # abrirlo cuenta como usarlo: no se borra por antigüedad
+    return _read_job(d)
 
 
 @app.post("/api/jobs/{job_id}/params")
