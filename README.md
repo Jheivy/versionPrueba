@@ -66,6 +66,17 @@ extrusiones, así que se recorta a la vista más pequeña y las medidas mostrada
 - O repetir la foto que falle desde la revisión.
 - `job.json` incluye `warnings` (`dim`, `views`, `values`, `diff`); vacío cuando todo cuadra.
 
+## Calidad de las fotos
+Cada foto se evalúa y `job.json` guarda `quality` (por vista) y `quality_warnings`; la revisión y el resultado muestran un aviso
+plegable si hace falta:
+- **Marcadores:** se ven menos de 3 de los 4 (la medida funciona con 2, pero es menos fiable). La cámara ya avisa «se ven N de 4».
+- **Hoja deformada:** los marcadores caen a más de 0,5 mm de su sitio (lente que distorsiona o papel arrugado). Las esquinas se
+  refinan a subpíxel para que esto solo salte con deformaciones reales.
+- **Contorno poco fiable:** el borde de la pieza se distingue poco del papel (contraste < 0,2), p. ej. una pieza blanca sobre el A4.
+- **Luz:** el contorno quita el degradado de luz del papel (antes un lado oscuro de la hoja se tomaba por pieza) y separa por color
+  las piezas claras de las sombras. Probado con degradado del 55 %, sombras suaves, ruido del sensor, luz cálida y piezas de
+  color negro a gris claro, amarillas y azules (±0,5 mm; ±1,3 mm con sombra, degradado y pieza gris a la vez).
+
 ## Corrección de paralaje
 La hoja se rectifica con el plano del papel, pero la cara superior de la pieza está más cerca de la cámara y se ve
 más grande (una pieza de 4 cm con la cámara a 30 cm: +15 %). `views/parallax.py` estima la distancia y el punto bajo la

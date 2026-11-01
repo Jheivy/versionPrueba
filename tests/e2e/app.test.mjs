@@ -15,7 +15,7 @@ describe("recorrido en el móvil", () => {
     assert.equal(await page.locator(".method").count(), 2);
     await page.click("text=Trabajos");
     await page.waitForSelector(".job");
-    assert.equal(await page.locator(".job").count(), 4);
+    assert.equal(await page.locator(".job").count(), 5);
     await page.waitForFunction(() => { const i = document.querySelector("img.thumb.model"); return i?.complete && i.naturalWidth > 0; });
     assert.deepEqual(errors, []);
     await close();
@@ -63,6 +63,17 @@ describe("recorrido en el móvil", () => {
     await close();
   });
 
+  test("una pieza clara sobre el papel avisa de que el contorno es poco fiable", async () => {
+    const { page, errors, close } = await h.page();
+    await go(page, `trabajos/${h.ids.clear}`, ".note[role=alert]");
+    await page.locator(".note summary").first().click();
+    const text = await page.locator(".note").first().innerText();
+    assert.match(text, /calidad de una foto/);
+    assert.match(text, /se distingue poco del papel/);
+    assert.deepEqual(errors, []);
+    await close();
+  });
+
   test("ajustes: estado del servidor y almacenamiento", async () => {
     const { page, errors, close } = await h.page();
     await go(page, "ajustes", ".group");
@@ -76,7 +87,7 @@ describe("recorrido en el móvil", () => {
 
 describe("auditoría de interfaz (2 anchos × 2 temas)", () => {
   const routes = (ids) => [["capturar", "capturar", ".method"], ["trabajos", "trabajos", ".job"], ["detalle", `trabajos/${ids.done}`, ".viewer[data-ready]"],
-    ["revision", `trabajos/${ids.review}`, ".review img[src]"], ["error", `trabajos/${ids.error}`, ".banner.err"], ["ajustes", "ajustes", ".group"]];
+    ["revision", `trabajos/${ids.review}`, ".review img[src]"], ["calidad", `trabajos/${ids.clear}`, ".note[role=alert]"], ["error", `trabajos/${ids.error}`, ".banner.err"], ["ajustes", "ajustes", ".group"]];
 
   for (const width of [360, 412]) for (const dark of [false, true]) {
     test(`${width} px ${dark ? "oscuro" : "claro"}: sin desbordes, sin objetivos < 44 px y sin botones sin nombre`, async () => {

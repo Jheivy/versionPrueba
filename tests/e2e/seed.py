@@ -7,7 +7,7 @@ import time
 import cv2
 import httpx
 import numpy as np
-from synth import photo3d
+from synth import photo3d, scene
 
 from app.views.markers import render_sheet
 
@@ -43,10 +43,12 @@ def main(base):
         done = upload(c, "Caja de prueba", photos)
         review = upload(c, "Caja en revisión", photos, review=True)
         review2 = upload(c, "Caja para continuar", photos, review=True)
+        clear = upload(c, "Pieza clara", {"planta": scene(SHEET, color=(228, 228, 228))})
         blank = {"planta": np.full((600, 800, 3), 128, np.uint8)}
         error = upload(c, "Foto sin hoja", blank)
-        wait(c, done, "done"), wait(c, review, "review"), wait(c, review2, "review"), wait(c, error, "error")
-    print(json.dumps({"done": done, "review": review, "continue": review2, "error": error}))
+        for job, status in ((done, "done"), (review, "review"), (review2, "review"), (clear, "done"), (error, "error")):
+            wait(c, job, status)
+    print(json.dumps({"done": done, "review": review, "continue": review2, "clear": clear, "error": error}))
 
 
 if __name__ == "__main__":

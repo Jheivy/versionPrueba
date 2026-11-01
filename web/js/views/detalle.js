@@ -91,6 +91,15 @@ export function detalle(root, { id }) {
       h("button", { class: "btn btn-sm", style: "justify-self:start", onclick: unify }, "Unificar (promedio)"));
   }
 
+  /** Avisos de calidad de las fotos: pocos marcadores, hoja deformada o pieza clara sobre el papel. */
+  function qualityNote() {
+    const q = j.quality_warnings;
+    if (!q?.length) return null;
+    return note("warn", q.length > 1 ? `${q.length} avisos sobre la calidad de las fotos` : "Aviso sobre la calidad de una foto",
+      ...q.map((w) => h("div", { class: "stack", style: "gap:2px" }, h("b", {}, VIEW_LABEL[w.view]), h("span", { class: "small" }, w.message))),
+      h("p", { class: "small muted", style: "margin:4px 0 0" }, "La medida puede perder precisión. Repite la foto o mide con calibre en «Ajustar medidas»."));
+  }
+
   /* ---------- Revisión de contornos ---------- */
   async function retake(view) {
     const f = await pickFile("image/*", true);
@@ -126,6 +135,7 @@ export function detalle(root, { id }) {
         h("div", { class: "legend" }, h("span", {}, h("i", { style: "background:var(--accent)" }), "Contorno"), h("span", {}, h("i", { style: "background:#18a5c9" }), "Agujeros"),
           h("span", {}, "Rectas ya enderezadas"))),
       mismatchBanner(true),
+      qualityNote(),
       ...views.map(viewCard),
       h("div", { class: "actionbar", style: "grid-template-columns:1fr" }, go)].filter(Boolean));
   }
@@ -184,6 +194,7 @@ export function detalle(root, { id }) {
       specs,
       parallaxNote(),
       mismatchBanner(false),
+      qualityNote(),
       j.holes?.length > 0 && h("div", { class: "holes", "aria-label": "Agujeros detectados" },
         h("div", { class: "eyebrow", style: "margin:2px 0 8px" }, `${j.holes.length} ${j.holes.length === 1 ? "agujero" : "agujeros"}`),
         h("div", { class: "chips" }, j.holes.map((x) => h("span", { class: "chip mono" }, holeName(x), x.std && h("span", { class: "muted" }, ` ${x.std}?`))))),

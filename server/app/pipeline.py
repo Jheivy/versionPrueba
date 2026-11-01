@@ -19,12 +19,13 @@ from . import jobs
 from .views import coherence, parallax
 from .views.contours import NoShapeFound, extract
 from .views.holes import finalize, split_circles
-from .views.rectify import MarkersNotFound, rectify
+from .views.rectify import RMS_WARN_MM, MarkersNotFound, rectify_full
 from .views.regularize import regularize_view
 from .views.scad_writer import build_scad
 
 log = logging.getLogger("scan2print")
 PX = 10.0
+MIN_CONTRAST = 0.2       # por debajo, la pieza se parece demasiado al papel para fiarse del contorno
 OUT_DIR = Path(os.environ.get("SCAN2PRINT_OUT", Path.home() / "Scan2Print" / "out"))
 WEBHOOK = os.environ.get("SCAN2PRINT_WEBHOOK")  # URL que recibe un POST JSON al terminar
 PARAM_KEYS = ("ancho", "fondo", "alto", "holgura", "enderezar", "unificar", "paralaje")  # cotas, holgura, flags 0/1
@@ -95,6 +96,26 @@ class ViewError(ValueError):
         self.view = view
 
 
+def _quality(view: str, rect: dict, contrast: float) -> dict:
+    """Calidad de una foto: marcadores usados, error de la hoja y contraste del borde, con los avisos que toquen."""
+    issues = []
+    if rect["markers"] < 3:
+        issues.append(("markers", f"Solo se ven {rect['markers']} marcadores de la hoja: "
+                                  "con los 4 la medida es más fiable."))
+    if rect["rms_mm"] > RMS_WARN_MM:
+        issues.append(("sheet", f"La hoja sale deformada ({rect['rms_mm']:.1f} mm de error): la lente distorsiona "
+                                "o el papel está arrugado. Alisa la hoja, aleja el móvil y usa zoom."))
+    if contrast < MIN_CONTRAST:
+        issues.append(("contrast", "La pieza se distingue poco del papel (clara sobre blanco): "
+                                    "revisa el contorno o mide con calibre."))
+    return {"markers": rect["markers"], "rms_mm": rect["rms_mm"], "contrast": contrast,
+            "issues": [{"view": view, "kind": k, "message": m} for k, m in issues]}
+
+
+def _issues(quality: dict) -> list[dict]:
+    return [i for q in quality.values() for i in q["issues"]]
+
+
 def _scale(contours, sx, sy):
     return [[(x * sx, y * sy) for x, y in c] for c in contours]
 
@@ -137,7 +158,7 @@ def process_views(d: Path, params: dict | None = None, pause_for_review: bool = 
             params = {k: float(v) for k, v in (params or {}).items()
                       if (k in PARAM_KEYS or HOLE_KEY.fullmatch(k)) and v not in (None, "")}
             _set(d, status="processing", error=None, error_view=None)
-            views, circles, origins, poses = {}, {}, {}, {}
+            views, circles, origins, poses, quality = {}, {}, {}, {}, {}
             for p in sorted((d / "input").iterdir()):
                 name = p.name.split("_", 1)[0]
                 if name in ("planta", "alzado", "perfil"):
@@ -146,13 +167,15 @@ def process_views(d: Path, params: dict | None = None, pause_for_review: bool = 
                         raise ViewError(name, f"No se pudo leer la foto de {name}. Vuelve a hacerla.")
                     _step(d, "rectifying")
                     try:
-                        sheet, h_mm = rectify(img, PX, return_h=True)
+                        sheet, h_mm, rect = rectify_full(img, PX)
                     except MarkersNotFound:
                         raise ViewError(name, f"No vi la hoja de marcadores en la foto de {name}. "
                                               "Encuádrala entera y con buena luz.")
                     _step(d, "contours")
                     try:
-                        polys, origins[name] = extract(sheet, PX, return_origin=True)
+                        shape = {}
+                        polys, origins[name] = extract(sheet, PX, return_origin=True, info=shape)
+                        quality[name] = _quality(name, rect, shape["contrast"])
                         views[name], circles[name] = split_circles(polys)
                         poses[name] = parallax.camera_pose(h_mm, img.shape, parallax.focal_35(p))
                     except NoShapeFound:
@@ -169,7 +192,8 @@ def process_views(d: Path, params: dict | None = None, pause_for_review: bool = 
                     circles[name] = [(cx - dx, cy - dy, dm) for cx, cy, dm in circles[name]]
             sizes = coherence.sizes(views)
             if pause_for_review:
-                _set(d, status="review", step="review", warnings=coherence.check(sizes), parallax=info)
+                _set(d, status="review", step="review", warnings=coherence.check(sizes), parallax=info,
+                     quality=quality, quality_warnings=_issues(quality))
                 return
             _step(d, "modeling")
 
@@ -212,7 +236,8 @@ def process_views(d: Path, params: dict | None = None, pause_for_review: bool = 
             exported = _export(d, d.name)
             rev = time.time_ns() // 1_000_000  # nueva revisión: invalida las cachés del navegador
             _set(d, status="done", rev=rev, step=None, outputs=outputs, detected=detected, params=params,
-                 dims=dims, holes=holes, warnings=warnings, parallax=info, exported=exported)
+                 dims=dims, holes=holes, warnings=warnings, parallax=info,
+                 quality=quality, quality_warnings=_issues(quality), exported=exported)
             _notify({"event": "job.done", "id": d.name, "dims": dims, "files": exported})
         except ViewError as e:
             _set(d, status="error", step=None, error=str(e), error_view=e.view)
