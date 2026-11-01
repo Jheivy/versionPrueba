@@ -18,7 +18,7 @@ Dónde está cada cosa para anotar resultados:
    - Genera el certificado **también con la IP del Mac**, por si el móvil no resuelve `.local`:
      `mkcert -cert-file cert.pem -key-file key.pem "$(scutil --get LocalHostName).local" localhost 192.168.X.Y`
    - Arranca con `deploy/run.sh` y comprueba que en la terminal sale el QR de emparejamiento (o `deploy/pair.sh`).
-2. **Hoja de marcadores**: `python3 tools/marker_sheet.py` → imprime `marker_sheet.pdf` **al 100 %** (sin «ajustar a página») y
+2. **Hoja de marcadores**: la app la ofrece en *Ajustes → Hoja de marcadores (PDF, A4)* (o `server/.venv/bin/python tools/marker_sheet.py`) → imprime el PDF **al 100 %** (sin «ajustar a página») y
    **mide un marcador con el calibre: debe medir 30,0 mm** (si no, la escala de todo estará mal). Anótalo: ____ mm.
 3. **Móvil**: instala la CA de `mkcert -CAROOT` (Ajustes → Seguridad → Certificados), abre `https://<mac>.local:8443` (o la IP),
    escanea el QR / escribe el código → «Instalar app».
