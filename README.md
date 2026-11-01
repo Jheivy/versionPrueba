@@ -40,7 +40,17 @@ pos_agujero_planta_1 = [12.300, 8.100];
 ```
 - En la app aparecen como chips («Ø3,2 mm · planta 1 · posible M3») y se corrige cada Ø con el calibre en *Ajustar medidas*.
 - La etiqueta métrica es solo una **sugerencia**: la medida fotográfica tiene ±0,1 mm de error y no se ajusta sola.
-- Los huecos que no son círculos (cuadrados, hexágonos, ranuras) y los de Ø < ~2,5 mm se mantienen como polígono.
+- **Ranuras** (dos semicírculos unidos por rectas, largo ≥ 1,35 × ancho): se detectan con su ancho, largo total y ángulo y se
+  escriben como parámetros propios, orientables y editables a mano:
+  ```
+  ancho_ranura_planta_1 = 5.000;
+  largo_ranura_planta_1 = 14.000;  // de punta a punta
+  ang_ranura_planta_1 = 20.0;
+  pos_ranura_planta_1 = [30.000, 15.000];
+  ```
+  En la app salen como «Ranura 5,0 × 14,0 · planta 1» y *Ajustar medidas* permite corregir su ancho y su largo.
+- Los demás huecos (cuadrados, hexágonos, formas libres) y los de Ø < ~2,5 mm se mantienen como polígono.
+- **Avellanados y chaflanes no se pueden detectar** desde la silueta: solo se ve por dónde pasa la luz, no su perfil.
 - El contorno pasa por los píxeles del borde del material, así que el Ø se corrige 1 píxel (0,1 mm); el error en pruebas sintéticas es ≤ 0,1 mm.
 
 ## Enderezado de contornos

@@ -9,7 +9,13 @@ const STEPS = {
 };
 const VIEW_LABEL = { planta: "Planta", alzado: "Alzado", perfil: "Perfil" };
 const DIM_LABEL = { ancho: "Ancho (X)", fondo: "Fondo (Y)", alto: "Alto (Z)" };
-const holeName = (x) => `Ø${fmt(x.diam)} · ${VIEW_LABEL[x.view].toLowerCase()} ${x.n}`;
+const holeName = (x) => x.kind === "slot"
+  ? `Ranura ${fmt(x.width)} × ${fmt(x.length)} · ${VIEW_LABEL[x.view].toLowerCase()} ${x.n}`
+  : `Ø${fmt(x.diam)} · ${VIEW_LABEL[x.view].toLowerCase()} ${x.n}`;
+const holeCount = (hs) => {
+  const s = hs.filter((x) => x.kind === "slot").length, c = hs.length - s;
+  return [c && `${c} ${c === 1 ? "agujero" : "agujeros"}`, s && `${s} ${s === 1 ? "ranura" : "ranuras"}`].filter(Boolean).join(" · ");
+};
 const mmss = (ms) => { const s = Math.max(0, Math.round(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };
 
 export function detalle(root, { id }) {
@@ -196,7 +202,7 @@ export function detalle(root, { id }) {
       mismatchBanner(false),
       qualityNote(),
       j.holes?.length > 0 && h("div", { class: "holes", "aria-label": "Agujeros detectados" },
-        h("div", { class: "eyebrow", style: "margin:2px 0 8px" }, `${j.holes.length} ${j.holes.length === 1 ? "agujero" : "agujeros"}`),
+        h("div", { class: "eyebrow", style: "margin:2px 0 8px" }, holeCount(j.holes)),
         h("div", { class: "chips" }, j.holes.map((x) => h("span", { class: "chip mono" }, holeName(x), x.std && h("span", { class: "muted" }, ` ${x.std}?`))))),
       j.mesh?.scale_source === "marcadores" && h("p", { class: "muted small", style: "margin:0" }, icon("ruler"),
         ` Escala real medida con la hoja de marcadores (${j.mesh.sheet?.markers ?? "?"} marcadores, error ${fmt(j.mesh.sheet?.rms_mm ?? 0)} mm).`),
@@ -241,7 +247,10 @@ export function detalle(root, { id }) {
            h("label", { class: "field" }, "Detalle de la reconstrucción", h("select", { name: "detalle" },
              [["medium", "Medio"], ["full", "Alto (más lento)"], ["reduced", "Bajo (rápido)"]].map(([v, t]) => h("option", { value: v, selected: (p.detalle || "medium") === v }, t))))]
         : [h("div", { class: "field-grid" }, num("ancho", "Ancho", fmt(det.ancho ?? 0), "x"), num("fondo", "Fondo", fmt(det.fondo ?? 0), "y"), num("alto", "Alto", fmt(det.alto ?? 0), "z")),
-           ...(j.holes || []).map((x) => num(`d_${x.view}_${x.n}`, `Ø ${VIEW_LABEL[x.view].toLowerCase()} ${x.n}`, fmt(x.diam), null, "0.05")),
+           ...(j.holes || []).flatMap((x) => x.kind === "slot"
+             ? [num(`w_${x.view}_${x.n}`, `Ranura ${VIEW_LABEL[x.view].toLowerCase()} ${x.n} · ancho`, fmt(x.width), null, "0.05"),
+                num(`l_${x.view}_${x.n}`, `Ranura ${VIEW_LABEL[x.view].toLowerCase()} ${x.n} · largo`, fmt(x.length), null, "0.05")]
+             : [num(`d_${x.view}_${x.n}`, `Ø ${VIEW_LABEL[x.view].toLowerCase()} ${x.n}`, fmt(x.diam), null, "0.05")]),
            h("label", { class: "toggle" }, h("span", {}, h("b", {}, "Enderezar contornos"), h("br"),
              h("span", { class: "muted small" }, "Rectas y ángulos de 90° exactos (hasta ~4° de desvío)")),
              h("input", { type: "checkbox", name: "enderezar", checked: (p.enderezar ?? 1) !== 0 })),

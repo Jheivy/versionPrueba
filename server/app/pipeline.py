@@ -18,7 +18,7 @@ import cv2
 from . import jobs
 from .views import coherence, parallax
 from .views.contours import NoShapeFound, extract
-from .views.holes import finalize, split_circles
+from .views.holes import finalize, split_holes
 from .views.rectify import RMS_WARN_MM, MarkersNotFound, rectify_full
 from .views.regularize import regularize_view
 from .views.scad_writer import build_scad
@@ -29,7 +29,7 @@ MIN_CONTRAST = 0.2       # por debajo, la pieza se parece demasiado al papel par
 OUT_DIR = Path(os.environ.get("SCAN2PRINT_OUT", Path.home() / "Scan2Print" / "out"))
 WEBHOOK = os.environ.get("SCAN2PRINT_WEBHOOK")  # URL que recibe un POST JSON al terminar
 PARAM_KEYS = ("ancho", "fondo", "alto", "holgura", "enderezar", "unificar", "paralaje")  # cotas, holgura, flags 0/1
-HOLE_KEY = re.compile(r"d_(planta|alzado|perfil)_(\d+)")  # Ø medido de un agujero, p. ej. d_planta_1
+HOLE_KEY = re.compile(r"[dwl]_(planta|alzado|perfil)_(\d+)")  # Ø (d), ancho (w) o largo (l) medido: d_planta_1
 
 
 def _openscad(scad: Path, stl: Path) -> None:
@@ -120,9 +120,14 @@ def _scale(contours, sx, sy):
     return [[(x * sx, y * sy) for x, y in c] for c in contours]
 
 
-def _scale_circles(circles, sx, sy):
-    # el contorno pasa por los píxeles del borde del material: el hueco sale ~1 píxel (0,1 mm) más grande
-    return [(cx * sx, cy * sy, (d - 1 / PX) * math.sqrt(sx * sy)) for cx, cy, d in circles]
+def _scale_holes(holes, sx, sy):
+    """Agujeros (círculo: cx, cy, Ø; ranura: cx, cy, ancho, largo, ángulo) ajustados a la escala de su vista.
+    El contorno pasa por los píxeles del borde del material: el hueco sale ~1 píxel (0,1 mm) más grande."""
+    g, out = math.sqrt(sx * sy), []
+    for cx, cy, *size in holes:
+        grown = tuple((v - 1 / PX) * g for v in size[:2 if len(size) == 3 else 1])
+        out.append((cx * sx, cy * sy, *grown, *size[2:]))
+    return out
 
 
 def _fix_parallax(views, circles, origins, poses, params) -> dict:
@@ -176,7 +181,8 @@ def process_views(d: Path, params: dict | None = None, pause_for_review: bool = 
                         shape = {}
                         polys, origins[name] = extract(sheet, PX, return_origin=True, info=shape)
                         quality[name] = _quality(name, rect, shape["contrast"])
-                        views[name], circles[name] = split_circles(polys)
+                        views[name], *found = split_holes(polys)
+                        circles[name] = found[0] + found[1]       # círculos (3 valores) y ranuras (5)
                         poses[name] = parallax.camera_pose(h_mm, img.shape, parallax.focal_35(p))
                     except NoShapeFound:
                         raise ViewError(name, f"No encontré la pieza en la foto de {name}. "
@@ -189,7 +195,7 @@ def process_views(d: Path, params: dict | None = None, pause_for_review: bool = 
             if params.get("enderezar", 1.0) != 0:  # antes de medir: las revisiones y el modelo ven lo mismo
                 for name in views:
                     views[name], (dx, dy) = regularize_view(views[name])
-                    circles[name] = [(cx - dx, cy - dy, dm) for cx, cy, dm in circles[name]]
+                    circles[name] = [(cx - dx, cy - dy, *rest) for cx, cy, *rest in circles[name]]
             sizes = coherence.sizes(views)
             if pause_for_review:
                 _set(d, status="review", step="review", warnings=coherence.check(sizes), parallax=info,
@@ -211,20 +217,30 @@ def process_views(d: Path, params: dict | None = None, pause_for_review: bool = 
                                           for i, dim in enumerate((dx_, dy_)))
                     views[view] = _scale(views[view], *factors[view])
             altura = target.get("alto", detected["alto"])
-            final, holes = {}, []
+            final, final_slots, holes = {}, {}, []
             for view, cs in circles.items():
-                final[view] = []
-                for n, (cx, cy, dm) in enumerate(_scale_circles(cs, *factors[view]), 1):
-                    measured = params.get(f"d_{view}_{n}")
-                    diam, std = finalize(measured if measured else dm)
-                    final[view].append((cx, cy, diam, std))
-                    holes.append({"view": view, "n": n, "diam": diam, "x": round(cx, 2), "y": round(cy, 2), "std": std})
+                final[view], final_slots[view] = [], []
+                for cx, cy, *size in _scale_holes(cs, *factors[view]):
+                    if len(size) == 1:
+                        n = len(final[view]) + 1
+                        measured = params.get(f"d_{view}_{n}")
+                        diam, std = finalize(measured if measured else size[0])
+                        final[view].append((cx, cy, diam, std))
+                        holes.append({"kind": "circle", "view": view, "n": n, "diam": diam,
+                                      "x": round(cx, 2), "y": round(cy, 2), "std": std})
+                    else:
+                        n = len(final_slots[view]) + 1
+                        w = round(params.get(f"w_{view}_{n}") or size[0], 1)
+                        length = round(params.get(f"l_{view}_{n}") or size[1], 1)
+                        final_slots[view].append((cx, cy, w, max(length, w), round(size[2], 1)))
+                        holes.append({"kind": "slot", "view": view, "n": n, "width": w, "length": max(length, w),
+                                      "angle": round(size[2], 1), "x": round(cx, 2), "y": round(cy, 2)})
             warnings = coherence.check(coherence.sizes(views))  # lo que siga sin cuadrar tras ajustar
 
             out = d / "output"
             out.mkdir(exist_ok=True)
             scad = build_scad(views["planta"], views.get("alzado"), views.get("perfil"),
-                              holgura=params.get("holgura", 0.0), altura=altura, circles=final)
+                              holgura=params.get("holgura", 0.0), altura=altura, circles=final, slots=final_slots)
             (out / "pieza.scad").write_text(scad)
             outputs = ["pieza.scad"]
             (out / "pieza.stl").unlink(missing_ok=True)

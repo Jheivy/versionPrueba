@@ -15,7 +15,7 @@ describe("recorrido en el móvil", () => {
     assert.equal(await page.locator(".method").count(), 2);
     await page.click("text=Trabajos");
     await page.waitForSelector(".job");
-    assert.equal(await page.locator(".job").count(), 5);
+    assert.equal(await page.locator(".job").count(), 6);
     await page.waitForFunction(() => { const i = document.querySelector("img.thumb.model"); return i?.complete && i.naturalWidth > 0; });
     assert.deepEqual(errors, []);
     await close();
@@ -70,6 +70,18 @@ describe("recorrido en el móvil", () => {
     const text = await page.locator(".note").first().innerText();
     assert.match(text, /calidad de una foto/);
     assert.match(text, /se distingue poco del papel/);
+    assert.deepEqual(errors, []);
+    await close();
+  });
+
+  test("una ranura y un agujero salen como parámetros medibles", async () => {
+    const { page, errors, close } = await h.page();
+    await go(page, `trabajos/${h.ids.holes}`, ".holes");
+    const text = await page.locator(".holes").innerText();
+    assert.match(text, /1 agujero · 1 ranura/i);
+    assert.match(text, /Ranura \d+,\d × \d+,\d/);
+    await page.getByRole("button", { name: "Ajustar medidas" }).click();
+    for (const name of ["d_planta_1", "w_planta_1", "l_planta_1"]) assert.equal(await page.locator(`input[name=${name}]`).count(), 1, name);
     assert.deepEqual(errors, []);
     await close();
   });
