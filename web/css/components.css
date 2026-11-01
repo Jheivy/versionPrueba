@@ -221,3 +221,16 @@ input:focus, select:focus { outline: none; border-color: var(--accent); box-shad
 .group-title { font-size: .78rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin: 22px 6px 8px; }
 .settings-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 56px; padding: 11px 0; border-bottom: 1px solid var(--line); }
 .settings-row:last-child { border-bottom: 0; }
+
+/* ---------- Emparejamiento y dispositivos ---------- */
+.pair { min-height: 100dvh; display: grid; align-items: center; padding: 24px 18px; max-width: 460px; margin: 0 auto; }
+.pair .brand { width: 72px; height: 72px; border-radius: 20px; box-shadow: var(--glow); }
+.code { text-align: center; font: 700 1.6rem/1 ui-monospace, "SF Mono", Menlo, Consolas, monospace; letter-spacing: .18em; text-transform: uppercase; }
+.pair code, .qr-code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; background: var(--surface-2); padding: 1px 6px; border-radius: 6px; }
+.device { display: flex; align-items: center; gap: 12px; min-height: 64px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.device:last-child { border-bottom: 0; }
+.device .meta { flex: 1; min-width: 0; }
+.device .meta strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.qr { display: grid; justify-items: center; gap: 12px; text-align: center; }
+.qr img { width: min(260px, 70vw); height: auto; border-radius: var(--r-m); border: 1px solid var(--line); }
+.qr-code { font-size: 1.7rem; font-weight: 700; letter-spacing: .16em; padding: 6px 14px; }

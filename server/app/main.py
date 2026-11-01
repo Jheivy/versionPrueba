@@ -18,10 +18,10 @@ import cv2
 import numpy as np
 from fastapi import BackgroundTasks, Body, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from . import jobs
+from . import auth, jobs
 from .pipeline import process_views
 from .pipeline_video import process_video
 from .views.contours import NoShapeFound
@@ -57,6 +57,11 @@ async def _announce(state: dict) -> None:
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     jobs.recover_stale(STORAGE)
+    if auth.enabled() and not auth.has_devices():     # primer arranque: enseña cómo emparejar el primer móvil
+        try:
+            auth.show_pairing()
+        except Exception:
+            pass
     state: dict = {}
     task = asyncio.create_task(_announce(state))
     yield
@@ -66,7 +71,8 @@ async def lifespan(_: FastAPI):
         await state["azc"].async_close()
 
 
-app = FastAPI(title="Scan2Print", lifespan=lifespan)
+# sin documentación interactiva pública (/docs, /openapi.json)
+app = FastAPI(title="Scan2Print", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
 app.add_middleware(GZipMiddleware, minimum_size=1024)  # JS/CSS/JSON/STL de texto: 3-5x menos bytes por Wi-Fi
 
 
@@ -81,6 +87,91 @@ def _job_dir(job_id: str) -> Path:
 
 def _read_job(d: Path) -> dict:
     return jobs.read(d)
+
+
+PUBLIC_API = {("POST", "/api/pair"), ("GET", "/api/auth/status")}   # lo único accesible sin emparejar
+
+
+@app.middleware("http")
+async def require_pairing(request: Request, call_next):
+    """Todo /api exige un dispositivo emparejado (cookie o Bearer), salvo lo imprescindible para emparejar."""
+    path = request.url.path
+    if not path.startswith("/api/") or not auth.enabled() or (request.method, path) in PUBLIC_API:
+        return await call_next(request)
+    who = auth.identify(request.headers, request.cookies, request.client.host if request.client else None)
+    if who is None:
+        return JSONResponse({"detail": "no autorizado"}, status_code=401)
+    writes = request.method not in ("GET", "HEAD", "OPTIONS")
+    if who["via"] == "cookie" and writes and not auth.same_origin(request.headers):
+        return JSONResponse({"detail": "origen no permitido"}, status_code=403)
+    request.state.device = who
+    return await call_next(request)
+
+
+def _client_ip(request: Request) -> str:
+    return request.client.host if request.client else "?"
+
+
+@app.get("/api/auth/status")
+def auth_status(request: Request):
+    who = auth.identify(request.headers, request.cookies, _client_ip(request)) if auth.enabled() else None
+    return {"required": auth.enabled(), "authenticated": who is not None or not auth.enabled(),
+            "device": who["name"] if who else None, "local": bool(who and who["via"] == "local")}
+
+
+@app.post("/api/pair")
+def pair(request: Request, body: dict = Body(...)):
+    """Canjea el código de un solo uso por una sesión (cookie HttpOnly) para este dispositivo."""
+    ip = _client_ip(request)
+    if auth.blocked(ip):
+        raise HTTPException(429, "demasiados intentos: espera unos minutos")
+    try:
+        token, device = auth.redeem_code(str(body.get("code", "")), str(body.get("name", "")))
+    except auth.AuthError as e:
+        auth.register_fail(ip)
+        raise HTTPException(401, str(e)) from e
+    resp = JSONResponse({"id": device["id"], "name": device["name"]})
+    resp.set_cookie(auth.COOKIE, token, max_age=365 * 86400, httponly=True, samesite="strict",
+                    secure=request.url.scheme == "https", path="/")
+    return resp
+
+
+@app.post("/api/pairing-code")
+def pairing_code(request: Request):
+    """Un código nuevo para emparejar otro dispositivo (lo pide un dispositivo ya emparejado o el propio Mac)."""
+    code, ttl = auth.new_code()
+    return {"code": code, "display": auth.display_code(code), "expires_in": ttl,
+            "url": auth.pairing_url(str(request.base_url), code)}
+
+
+@app.get("/api/pairing/qr.svg")
+def pairing_qr(request: Request, code: str):
+    import segno
+    buf = io.BytesIO()
+    segno.make(auth.pairing_url(str(request.base_url), auth.normalize_code(code)), error="m").save(
+        buf, kind="svg", scale=6, border=2, dark="#0e1322", light="#ffffff", xmldecl=False, svgns=True)
+    return Response(buf.getvalue(), media_type="image/svg+xml", headers={"Cache-Control": "no-store"})
+
+
+@app.get("/api/devices")
+def devices(request: Request):
+    me = request.state.device["id"]
+    return [{**d, "current": d["id"] == me} for d in auth.list_devices()]
+
+
+@app.delete("/api/devices/{device_id}", status_code=204)
+def revoke_device(device_id: str):
+    if not auth.revoke(device_id):
+        raise HTTPException(404, "dispositivo no encontrado")
+
+
+@app.post("/api/auth/logout")
+def logout(request: Request):
+    """Cierra la sesión de este dispositivo: lo revoca y borra la cookie."""
+    auth.revoke(request.state.device["id"])
+    resp = JSONResponse({"ok": True})
+    resp.delete_cookie(auth.COOKIE, path="/")
+    return resp
 
 
 BUSY = "El trabajo se está procesando; espera a que termine."

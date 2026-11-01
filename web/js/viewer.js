@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { authFetch } from "./api.js";
 import { STLLoader } from "three/addons/loaders/STLLoader.js";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 
@@ -43,7 +44,7 @@ export function createViewer(canvas) {
 
   return {
     async load(url) {
-      const geo = new STLLoader().parse(await (await fetch(url, { cache: "no-store" })).arrayBuffer());
+      const geo = new STLLoader().parse(await (await authFetch(url, { cache: "no-store" })).arrayBuffer());
       geo.computeVertexNormals();
       geo.computeBoundingBox();
       const b = geo.boundingBox;

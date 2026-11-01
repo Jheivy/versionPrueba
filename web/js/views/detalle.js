@@ -1,4 +1,4 @@
-import { api, post, patch, del, upload, pref } from "../api.js";
+import { api, authFetch, del, patch, post, pref, upload } from "../api.js";
 import { animateValue, confirmSheet, fmt, fmtDims, h, haptic, icon, jobName, openSheet, pickFile, slug, toast, topBar } from "../ui.js";
 import { prepareImage } from "../image.js";
 import { navigate } from "../router.js";
@@ -104,7 +104,7 @@ export function detalle(root, { id }) {
     const card = h("div", { class: "card review stack" },
       h("div", { class: "row" }, h("strong", { class: "grow" }, VIEW_LABEL[v]), info), img,
       h("button", { class: "btn btn-block", onclick: () => retake(v) }, icon("camera"), "Repetir foto"));
-    fetch(`/api/jobs/${id}/preview/${v}.png`).then(async (r) => {
+    authFetch(`/api/jobs/${id}/preview/${v}.png`).then(async (r) => {
       if (!r.ok) throw new Error();
       const i = JSON.parse(r.headers.get("X-Preview-Info"));
       info.textContent = `${fmt(i.ancho)} × ${fmt(i.alto)} mm · ${i.huecos} ${i.huecos === 1 ? "hueco" : "huecos"}`;

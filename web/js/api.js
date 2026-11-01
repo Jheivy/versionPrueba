@@ -1,6 +1,23 @@
-export async function api(path, opts) {
+/** Un 401 en cualquier llamada avisa a la app (una vez) para que lleve al emparejamiento. */
+let notified = false;
+function unauthorized() {
+  if (notified) return;
+  notified = true;
+  setTimeout(() => { notified = false; }, 1500);
+  dispatchEvent(new Event("s2p:unauthorized"));
+}
+
+/** fetch con manejo de errores de red y de 401 (la cookie de sesión va sola: es del mismo origen). */
+export async function authFetch(url, opts) {
   let r;
-  try { r = await fetch("/api" + path, opts); } catch { throw new Error("Sin conexión con el Mac"); }
+  try { r = await fetch(url, opts); } catch { throw new Error("Sin conexión con el Mac"); }
+  if (r.status === 401) unauthorized();
+  return r;
+}
+
+export async function api(path, opts) {
+  const r = await authFetch("/api" + path, opts);
+  if (r.status === 401) return new Promise(() => {});   // la pantalla de emparejamiento toma el relevo
   if (!r.ok) {
     let d; try { d = (await r.json()).detail; } catch { /* sin cuerpo */ }
     throw new Error(typeof d === "string" ? d : `Error ${r.status}`);
@@ -18,6 +35,7 @@ export function upload(path, fd, onProgress) {
     x.open("POST", "/api" + path);
     x.upload.onprogress = (e) => e.lengthComputable && onProgress?.(e.loaded / e.total);
     x.onload = () => {
+      if (x.status === 401) { unauthorized(); return reject(new Error("Este móvil no está emparejado")); }
       let b; try { b = JSON.parse(x.responseText); } catch { /* sin cuerpo */ }
       x.status < 300 ? resolve(b) : reject(new Error(typeof b?.detail === "string" ? b.detail : `Error ${x.status}`));
     };

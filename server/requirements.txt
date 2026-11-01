@@ -7,3 +7,4 @@ pillow
 trimesh
 scipy  # trimesh lo necesita para separar fragmentos de la malla
 zeroconf
+segno>=1.6
