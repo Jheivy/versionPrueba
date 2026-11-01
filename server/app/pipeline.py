@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import math
 import os
 import re
@@ -22,11 +23,27 @@ from .views.rectify import MarkersNotFound, rectify
 from .views.regularize import regularize_view
 from .views.scad_writer import build_scad
 
+log = logging.getLogger("scan2print")
 PX = 10.0
 OUT_DIR = Path(os.environ.get("SCAN2PRINT_OUT", Path.home() / "Scan2Print" / "out"))
 WEBHOOK = os.environ.get("SCAN2PRINT_WEBHOOK")  # URL que recibe un POST JSON al terminar
 PARAM_KEYS = ("ancho", "fondo", "alto", "holgura", "enderezar", "unificar", "paralaje")  # cotas, holgura, flags 0/1
 HOLE_KEY = re.compile(r"d_(planta|alzado|perfil)_(\d+)")  # Ø medido de un agujero, p. ej. d_planta_1
+
+
+def _openscad(scad: Path, stl: Path) -> None:
+    """Genera el STL; si falla, el motivo real va al registro y al usuario le llega una frase clara."""
+    try:
+        subprocess.run(["openscad", "-q", "-o", str(stl), str(scad)], check=True, capture_output=True,
+                       text=True, timeout=300)
+    except subprocess.TimeoutExpired:
+        raise RuntimeError("OpenSCAD tardó más de 5 minutos: la pieza es demasiado compleja. "
+                           "Prueba con «Enderezar contornos» o una foto más limpia.") from None
+    except subprocess.CalledProcessError as e:
+        lines = [x for x in (e.stderr or "").strip().splitlines() if x.strip()]
+        log.error("OpenSCAD falló (código %s):\n%s", e.returncode, "\n".join(lines[-15:]))
+        raise RuntimeError("OpenSCAD no pudo generar el STL" + (f": {lines[-1][:160]}" if lines else "")
+                           + ". Los detalles están en el registro del servidor.") from None
 
 
 def _set(d: Path, **kw):
@@ -36,6 +53,9 @@ def _set(d: Path, **kw):
 def _export(d: Path, job_id: str) -> dict:
     """Copia el resultado a OUT_DIR con nombre estable (para Orca o tus agentes)."""
     OUT_DIR.mkdir(parents=True, exist_ok=True)
+    for old in OUT_DIR.glob(f"*_{job_id[:8]}.*"):     # una regeneración sustituye a la exportación anterior
+        if old.suffix in (".stl", ".scad"):
+            old.unlink(missing_ok=True)
     base = f"{datetime.now():%Y%m%d-%H%M%S}_{job_id[:8]}"
     files = {}
     for ext in ("stl", "scad"):
@@ -186,8 +206,7 @@ def process_views(d: Path, params: dict | None = None, pause_for_review: bool = 
             (out / "pieza.stl").unlink(missing_ok=True)
             _step(d, "exporting")
             if shutil.which("openscad"):
-                subprocess.run(["openscad", "-q", "-o", str(out / "pieza.stl"), str(out / "pieza.scad")],
-                               check=True, capture_output=True, timeout=300)
+                _openscad(out / "pieza.scad", out / "pieza.stl")
                 outputs.append("pieza.stl")
             dims = {dim: target.get(dim, detected[dim]) for dim in detected}
             exported = _export(d, d.name)
@@ -198,4 +217,5 @@ def process_views(d: Path, params: dict | None = None, pause_for_review: bool = 
         except ViewError as e:
             _set(d, status="error", step=None, error=str(e), error_view=e.view)
         except Exception as e:  # el estado de error se muestra en la app
-            _set(d, status="error", step=None, error=str(e), error_view=None)
+            log.exception("el trabajo %s falló", d.name)
+            _set(d, status="error", step=None, error=str(e) or type(e).__name__, error_view=None)

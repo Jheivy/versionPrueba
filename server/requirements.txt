@@ -1,10 +1,12 @@
-fastapi>=0.110
-uvicorn[standard]>=0.29
-python-multipart>=0.0.9
-opencv-contrib-python-headless>=4.9
-numpy
-pillow
-trimesh
-scipy  # trimesh lo necesita para separar fragmentos de la malla
-zeroconf
-segno>=1.6
+# Rangos compatibles (mínimo conocido, tope en la siguiente versión mayor). Las versiones exactas con las que se
+# probó todo están en requirements.lock: pip install -r requirements.lock
+fastapi>=0.110,<1
+uvicorn[standard]>=0.29,<1
+python-multipart>=0.0.9,<1
+opencv-contrib-python-headless>=4.9,<6
+numpy>=1.26,<3
+pillow>=10,<14
+trimesh>=4,<6
+scipy>=1.11,<2  # trimesh lo necesita para separar fragmentos de la malla
+zeroconf>=0.130,<1
+segno>=1.6,<2
