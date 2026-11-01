@@ -1,23 +1,26 @@
 *, *::before, *::after { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; }
 body {
-  margin: 0; color: var(--fg); font: 400 16px/1.5 var(--font); font-feature-settings: "cv11", "ss01";
-  background: var(--bg); min-height: 100dvh;
+  margin: 0; color: var(--fg); font: 400 16px/1.5 var(--font); background: var(--bg); min-height: 100dvh;
   -webkit-tap-highlight-color: transparent; overscroll-behavior-y: contain; -webkit-font-smoothing: antialiased;
 }
-/* halo de color de fondo: capa fija propia (con `background-attachment: fixed` el navegador repinta todo el viewport en cada fotograma) */
+/* papel cuadriculado de plano: capa fija propia (con `background-attachment: fixed` se repinta todo el viewport) */
 body::before { content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
-  background: radial-gradient(120% 50% at 50% -8%, color-mix(in srgb, var(--accent) 11%, transparent), transparent 62%); }
+  background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: 28px 28px; -webkit-mask-image: linear-gradient(#000, transparent 60%); mask-image: linear-gradient(#000, transparent 60%); }
 main { max-width: 640px; margin: 0 auto; min-height: 100dvh; padding: 20px 16px calc(var(--tab-h) + 24px + env(safe-area-inset-bottom)); }
 body.immersive main { max-width: none; padding: 0; }
 body.immersive .tabbar { display: none; }
-h1 { font-size: 1.75rem; line-height: 1.15; margin: 4px 0 6px; letter-spacing: -.025em; font-weight: 700; }
-h2 { font-size: 1.05rem; margin: 0 0 8px; font-weight: 650; letter-spacing: -.01em; }
+h1 { font-size: 1.75rem; line-height: 1.12; margin: 4px 0 6px; letter-spacing: -.025em; font-weight: 600; }
+h2 { font-size: 1.05rem; margin: 0 0 8px; font-weight: 600; letter-spacing: -.01em; }
 p { margin: 0 0 12px; }
-a { color: var(--accent); }
+a { color: var(--accent-ink); }
+code { font-family: var(--mono); font-size: .9em; }
 .muted { color: var(--muted); }
 .small { font-size: .875rem; }
 .num { font-variant-numeric: tabular-nums; }
+.mono { font-family: var(--mono); font-weight: 500; font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
+.eyebrow { font: 600 .68rem/1 var(--font); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
 .stack { display: grid; gap: 12px; }
 .stack > * { min-width: 0; }  /* evita que un hijo ancho ensanche el grid */
 .row { display: flex; gap: 8px; align-items: center; }

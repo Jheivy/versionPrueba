@@ -26,7 +26,7 @@ def render_preview(image: np.ndarray, max_side: int = 900) -> tuple[bytes, dict]
     crop = cv2.cvtColor(crop, cv2.COLOR_GRAY2BGR) if crop.ndim == 2 else crop.copy()
     for k, p in enumerate(pts):
         poly = np.round(p - [x0, y0]).astype(np.int32)
-        cv2.polylines(crop, [poly], True, (235, 111, 31) if k == 0 else (0, 140, 255), 3, cv2.LINE_AA)
+        cv2.polylines(crop, [poly], True, (26, 96, 242) if k == 0 else (201, 165, 24), 3, cv2.LINE_AA)
     scale = max_side / max(crop.shape[:2])
     if scale < 1:
         crop = cv2.resize(crop, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)

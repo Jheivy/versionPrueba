@@ -11,7 +11,9 @@ export function route(pattern, load, opts = {}) {
   routes.push({ re, keys, load, opts });
 }
 
-export function navigate(path) { location.hash = "#" + path; }
+export function navigate(path, replace = false) {
+  if (replace) location.replace("#" + path); else location.hash = "#" + path;
+}
 
 const reducedMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 

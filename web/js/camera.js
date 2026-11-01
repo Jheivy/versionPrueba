@@ -1,5 +1,5 @@
 import { h, haptic, icon, pickFile, toast } from "./ui.js";
-import { upload, pref, setPref } from "./api.js";
+import { authFetch, pref, setPref, upload } from "./api.js";
 import { prepareImage } from "./image.js";
 import { navigate } from "./router.js";
 
@@ -31,7 +31,7 @@ function startDetect(video, onResult) {
       try {
         const blob = await new Promise((r) => c.toBlob(r, "image/jpeg", 0.6));
         const fd = new FormData(); fd.append("file", blob, "f.jpg");
-        const r = await fetch("/api/detect", { method: "POST", body: fd });
+        const r = await authFetch("/api/detect", { method: "POST", body: fd });
         if (!stop) onResult(r.ok ? await r.json() : null);
       } catch { if (!stop) onResult(null); }
       busy = false;

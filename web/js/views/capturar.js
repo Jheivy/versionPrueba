@@ -20,35 +20,38 @@ export function openHelp() {
 }
 
 const ART_VIEWS = `<svg viewBox="0 0 300 150" aria-hidden="true">
-  <g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-    <rect x="18" y="22" width="84" height="92" rx="12" opacity=".28"/><rect x="108" y="22" width="84" height="92" rx="12" opacity=".28"/><rect x="198" y="22" width="84" height="92" rx="12" opacity=".28"/>
-    <rect class="draw" pathLength="1" x="34" y="48" width="52" height="40" rx="3" stroke-width="2.4"/><circle class="draw" pathLength="1" cx="50" cy="68" r="7" stroke-width="2.4"/>
-    <path class="draw" pathLength="1" d="M126 90V50h14v22h32v18z" stroke-width="2.4"/>
-    <rect class="draw" pathLength="1" x="224" y="46" width="32" height="46" rx="3" stroke-width="2.4"/>
+  <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <rect class="draw" pathLength="1" x="30" y="30" width="60" height="42" rx="2"/><circle class="draw" pathLength="1" cx="48" cy="51" r="7"/>
+    <path class="draw" pathLength="1" d="M122 72V30h16v26h36v16z"/>
+    <rect class="draw" pathLength="1" x="214" y="26" width="36" height="46" rx="2"/>
   </g>
-  <g fill="currentColor" font-family="Inter,system-ui" font-size="9" font-weight="700" text-anchor="middle" opacity=".6"><text x="60" y="134">PLANTA</text><text x="150" y="134">ALZADO</text><text x="240" y="134">PERFIL</text></g>
+  <g class="dim" fill="none" stroke-width="1.2" stroke-linecap="round" opacity=".95">
+    <path d="M30 88h60M30 84v8M90 84v8"/><path d="M122 88h52M122 84v8M174 84v8"/><path d="M214 88h36M214 84v8M250 84v8"/>
+  </g>
+  <g class="dimtxt" font-family="IBM Plex Mono,ui-monospace,monospace" font-size="9" font-weight="600" text-anchor="middle"><text x="60" y="104">50</text><text x="148" y="104">50</text><text x="232" y="104">30</text></g>
+  <g fill="currentColor" font-family="IBM Plex Sans,system-ui" font-size="8.5" font-weight="600" letter-spacing=".12em" text-anchor="middle" opacity=".55"><text x="60" y="132">PLANTA</text><text x="148" y="132">ALZADO</text><text x="232" y="132">PERFIL</text></g>
 </svg>`;
 const ART_VIDEO = `<svg viewBox="0 0 300 150" aria-hidden="true">
-  <ellipse cx="150" cy="82" rx="96" ry="28" fill="none" stroke="currentColor" stroke-width="1.4" stroke-dasharray="2 6" stroke-linecap="round" opacity=".5"/>
-  <g fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+  <ellipse cx="150" cy="84" rx="100" ry="28" fill="none" stroke="currentColor" stroke-width="1.2" stroke-dasharray="2 6" stroke-linecap="round" opacity=".5"/>
+  <g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
     <path class="draw" pathLength="1" d="M150 46l30 17v34l-30 17-30-17V63z"/><path class="draw" pathLength="1" d="M150 80l30-17M150 80l-30-17M150 80v34" opacity=".7"/>
   </g>
-  <circle class="orbit-dot" r="6" fill="var(--accent-2)" style="offset-path:path('M 54 82 A 96 28 0 0 1 246 82 A 96 28 0 0 1 54 82')"/>
+  <circle class="orbit-dot" r="5.5" fill="var(--accent)" style="offset-path:path('M 50 84 A 100 28 0 0 1 250 84 A 100 28 0 0 1 50 84')"/>
 </svg>`;
 
 export function capturar(root) {
-  const card = (art, title, badge, text, href, cta) =>
+  const card = (art, title, badge, text, href, cta, primary) =>
     h("a", { class: "card card-link method", href, onclick: () => haptic("tap") },
       h("div", { class: "art", html: art }),
       h("div", { class: "body" },
         h("div", { class: "title" }, h("strong", {}, title), badge && h("span", { class: "chip ok" }, badge)),
         h("span", { class: "muted small" }, text),
-        h("span", { class: "btn btn-primary" }, cta)));
+        h("span", { class: "btn" + (primary ? " btn-primary" : "") }, cta)));
   root.append(h("div", { class: "stack stagger" },
-    h("div", {}, h("h1", {}, "Nueva captura"), h("p", { class: "lead" }, "Elige cómo quieres escanear la pieza.")),
+    h("div", {}, h("h1", {}, "Nueva captura"), h("p", { class: "lead" }, "Elige cómo medir la pieza.")),
     card(ART_VIEWS, "3 vistas", "Medidas precisas",
       "Planta, alzado y perfil sobre la hoja de marcadores. Ideal para piezas mecánicas, soportes y tapas. Genera un .scad editable.",
-      "#/capturar/vistas", "Empezar con 3 vistas"),
+      "#/capturar/vistas", "Empezar con 3 vistas", true),
     card(ART_VIDEO, "Vídeo 3D", null,
       "Gira alrededor de la pieza (30–60 s). Ideal para formas orgánicas. Se reconstruye en el Mac y luego indicas una medida real.",
       "#/capturar/video", "Grabar vídeo"),

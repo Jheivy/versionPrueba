@@ -1,4 +1,4 @@
-import { route, start } from "./router.js";
+import { navigate, route, start } from "./router.js";
 import { haptic, toast } from "./ui.js";
 
 // Cada pantalla se carga bajo demanda: el arranque solo trae lo que se ve.
@@ -7,8 +7,16 @@ route("/capturar/vistas", () => import("./camera.js").then((m) => m.camaraVistas
 route("/capturar/video", () => import("./camera.js").then((m) => m.camaraVideo), { tab: "capturar", immersive: true, depth: 2 });
 route("/trabajos", () => import("./views/trabajos.js").then((m) => m.trabajos), { tab: "trabajos" });
 route("/trabajos/:id", () => import("./views/detalle.js").then((m) => m.detalle), { tab: "trabajos", depth: 1 });
+route("/emparejar", () => import("./views/emparejar.js").then((m) => m.emparejar), { tab: "ajustes", immersive: true, depth: 2 });
+route("/emparejar/:code", () => import("./views/emparejar.js").then((m) => m.emparejar), { tab: "ajustes", immersive: true, depth: 2 });
 route("/ajustes", () => import("./views/ajustes.js").then((m) => m.ajustes), { tab: "ajustes" });
+// Sin emparejar, el servidor responde 401: se lleva al usuario a la pantalla de emparejamiento.
+addEventListener("s2p:unauthorized", () => { if (!location.hash.startsWith("#/emparejar")) navigate("/emparejar", true); });
 start();
+// En paralelo (sin retrasar el primer pintado): si este móvil no está emparejado, directo a emparejar.
+fetch("/api/auth/status").then((r) => r.json()).then((st) => {
+  if (st.required && !st.authenticated && !location.hash.startsWith("#/emparejar")) navigate("/emparejar", true);
+}).catch(() => {});
 document.querySelector(".tabbar")?.addEventListener("click", (e) => e.target.closest("a") && haptic("tick"));
 
 // Con el navegador en reposo se precargan el resto de pantallas y el visor 3D (three.js, local). Se usa

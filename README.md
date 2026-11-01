@@ -4,6 +4,22 @@ Fotografía una pieza (o su alzado/planta/perfil) con el móvil Android, envíal
 
 Diseño completo y hoja de ruta: [docs/DISENO.md](docs/DISENO.md).
 
+## Seguridad (emparejamiento)
+Cualquiera en tu Wi-Fi podía usar el hub; ahora **todo `/api` exige un dispositivo emparejado** (la app, `sw.js` y las
+imágenes estáticas siguen siendo públicas para poder cargar la pantalla de emparejamiento).
+- **Primer móvil:** al arrancar sin dispositivos, el servidor imprime un QR en su log; también `deploy/pair.sh`. El móvil lo
+  escanea (o teclea el código de 8 caracteres) y recibe una **cookie de sesión `HttpOnly` + `SameSite=Strict`**
+  (`Secure` bajo HTTPS) válida un año. El código vale **10 minutos y un solo uso**; 5 fallos desde una IP la bloquean 5 min.
+- **Más móviles:** *Ajustes → Seguridad → Emparejar otro dispositivo* (QR + código). Allí mismo se **revocan** dispositivos
+  y se cierra la sesión del móvil.
+- **Agentes y scripts** (tu página de impresión): `deploy/pair.sh token "mi agente"` imprime un token una sola vez;
+  se usa con `Authorization: Bearer s2p_…`. Se revoca con `deploy/pair.sh revoke <id>`.
+- **El propio Mac** (127.0.0.1) es de confianza, salvo que la petición lleve cabeceras de proxy (`X-Forwarded-For`…): si pones
+  un proxy delante en el mismo Mac, define `SCAN2PRINT_TRUST_LOCAL=0`.
+- En disco (`~/Scan2Print/auth.json`, modo 600) solo hay **hashes SHA-256** de tokens y códigos, nunca su valor.
+- Defensa extra contra CSRF: las escrituras con cookie exigen `Origin` igual al servidor. `/docs` y `/openapi.json` están desactivados.
+- Desactivar (no recomendado): `SCAN2PRINT_AUTH=off`. **Usa HTTPS** (mkcert, ver arriba): sin él la cookie viaja en claro.
+
 ## Interfaz (PWA)
 Tres pestañas — **Capturar · Trabajos · Ajustes** —, cámara guiada con semáforo en vivo (hoja detectada, nitidez, luz), revisión de contornos antes de generar, progreso por pasos, visor 3D con rejilla de 1 cm y cubo de referencia, y ajuste de medidas con calibre/holgura. Código en `web/` (`css/`, `js/`, `js/views/`), sin dependencias de build.
 
@@ -51,15 +67,16 @@ extrusiones, así que se recorta a la vista más pequeña y las medidas mostrada
 - `job.json` incluye `warnings` (`dim`, `views`, `values`, `diff`); vacío cuando todo cuadra.
 
 ## Diseño y rendimiento
-**Diseño** (`web/css/`, `web/js/`): sistema de tokens claro/oscuro con acento azul→violeta, tipografía Inter (local),
-barra inferior flotante con pastilla animada, tarjetas con profundidad, esqueletos de carga, transiciones entre
+**Diseño** (`web/css/`, `web/js/`): identidad «taller de precisión»: grafito y papel técnico, botón principal de tinta sólida, un único acento naranja
+(color del filamento), IBM Plex Sans y Mono para las cifras (local), cotas y corte por plano (X, Y, Z) en el visor 3D, miniaturas con el modelo
+renderizado en el servidor (`GET /api/jobs/{id}/thumb.png`), barra inferior flotante con pastilla de tinta, esqueletos de carga, transiciones entre
 pantallas (View Transitions API, con el sentido según la navegación), hápticos (ajustable en *Ajustes*) y gestos:
 deslizar una tarjeta para borrarla, arrastrar una hoja inferior para cerrarla y tirar de la lista para actualizar.
 Respeta `prefers-reduced-motion`.
 
 **Velocidad, sin paso de compilación:**
 - three.js (minificado) y la fuente se sirven desde el propio Mac (`web/vendor/`, `web/fonts/`): la app ya no
-  necesita internet. Licencias en `web/vendor/LICENSE-three.txt` y `web/fonts/LICENSE-inter-OFL.txt`.
+  necesita internet. Licencias en `web/vendor/LICENSE-three.txt` y `web/fonts/LICENSE-ibm-plex-OFL.txt`.
 - Cada pantalla se carga bajo demanda y, en reposo, las demás se precargan con `modulepreload` (sin ejecutarlas).
 - El servidor comprime (gzip) y cachea: `vendor/` y `fonts/` son inmutables, el resto se revalida con ETag y los
   modelos `…/pieza.stl?v=<rev>` son inmutables (la revisión cambia al regenerar).
