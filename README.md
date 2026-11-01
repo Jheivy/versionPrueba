@@ -2,7 +2,7 @@
 
 Fotografía una pieza (o su alzado/planta/perfil) con el móvil Android, envíala al Mac mini y obtén un `.scad` paramétrico + `.stl` listo para imprimir.
 
-Diseño completo y hoja de ruta: [docs/DISENO.md](docs/DISENO.md).
+Diseño completo y hoja de ruta: [docs/DISENO.md](docs/DISENO.md). **Guía para probarlo en el Mac y el móvil: [docs/PRUEBA.md](docs/PRUEBA.md).**
 
 ## Seguridad (emparejamiento)
 Cualquiera en tu Wi-Fi podía usar el hub; ahora **todo `/api` exige un dispositivo emparejado** (la app, `sw.js` y las
