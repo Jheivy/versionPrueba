@@ -155,12 +155,23 @@ export SCAN2PRINT_OBJECT_CAPTURE="$PWD/.build/release/scan2print-object-capture"
 $SCAN2PRINT_OBJECT_CAPTURE ./fotos ./salida medium && ls salida
 ```
 Flujo: vídeo → fotogramas nítidos (`photogrammetry/frames.py`) → CLI → `.obj` → `mesh.py` (mayor fragmento, Y-up→Z-up, m→mm, rellena huecos, apoya en Z=0) → `pieza.stl`.
-La escala de Object Capture es aproximada: indica en la app la **dimensión más larga medida con calibre**. El `.obj` se guarda en `work/` del trabajo y corregir la escala solo reprocesa la malla (segundos); cambiar el `detalle` sí repite la reconstrucción.
+**Escala automática con la hoja de marcadores.** Si grabas la pieza **sobre la hoja A4 de marcadores** (la misma de las 3 vistas),
+el servidor lo detecta en los fotogramas (`sheet_visible`) y lanza Object Capture con `keep-background` (sin enmascarar el fondo,
+para que la hoja salga en el modelo). Después `photogrammetry/scale.py` busca los marcadores ArUco en la textura del `.obj`,
+lleva sus esquinas a 3D con las coordenadas UV de la malla y ajusta una semejanza (Umeyama) con su posición real en la hoja:
+da la **escala en mm**, el **plano de la mesa** y el error del ajuste (se rechaza si pasa de 3 mm). Con eso `mesh.py` pone la
+mesa en Z = 0 (quita el papel, la pieza queda apoyada), alinea la huella con X/Y (lado largo en X) y deja el STL a escala
+real, sin indicar nada. La app muestra «Escala real medida con la hoja de marcadores (n marcadores, error x mm)».
+Si no se ve la hoja, todo sigue como antes: escala estimada y la **dimensión más larga medida con calibre** (que también manda
+sobre la hoja si la das). El `.obj` se guarda en `work/` del trabajo y corregir la escala solo reprocesa la malla (segundos); cambiar el `detalle` sí repite la reconstrucción.
 
 **Cosas a verificar en el Mac (no se han podido ejecutar aquí):**
 1. Que `swift build` compila (API `PhotogrammetrySession`).
 2. Que con una URL de carpeta `.modelFile` genera `*.obj`. Si solo genera `.usdz`, cambiar `Entry.swift` o convertir con `usdz`→`obj`.
-3. Orientación (Y-up) y que el STL aparece apoyado en Z=0 en Orca.
+3. Orientación y que el STL aparece apoyado en Z=0 en Orca.
+4. **Con la hoja en escena:** que `isObjectMaskingEnabled = false` hace que el papel salga en el modelo, que los marcadores se
+   leen en el atlas de textura (`log: hoja de marcadores en el modelo: 4 marcadores, error …`) y que el tamaño sale bien. Probado
+   aquí solo con mallas OBJ sintéticas que siguen la convención UV del formato (v = 0 abajo).
 
 ## Tests
 ```bash

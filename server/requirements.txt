@@ -8,5 +8,6 @@ numpy>=1.26,<3
 pillow>=10,<14
 trimesh>=4,<6
 scipy>=1.11,<2  # trimesh lo necesita para separar fragmentos de la malla
+networkx>=3,<4   # trimesh lo necesita para cerrar huecos de la malla (fill_holes)
 zeroconf>=0.130,<1
 segno>=1.6,<2

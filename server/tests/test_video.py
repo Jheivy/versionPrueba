@@ -62,7 +62,7 @@ def test_video_job_end_to_end(tmp_path, monkeypatch):
 
     calls = []
 
-    def fake_capture(frames, out, detail="medium"):
+    def fake_capture(frames, out, detail="medium", keep_background=False):
         calls.append(detail)
         assert len(list(frames.glob("*.jpg"))) >= 10
         out.mkdir()

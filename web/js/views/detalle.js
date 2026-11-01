@@ -198,7 +198,9 @@ export function detalle(root, { id }) {
       j.holes?.length > 0 && h("div", { class: "holes", "aria-label": "Agujeros detectados" },
         h("div", { class: "eyebrow", style: "margin:2px 0 8px" }, `${j.holes.length} ${j.holes.length === 1 ? "agujero" : "agujeros"}`),
         h("div", { class: "chips" }, j.holes.map((x) => h("span", { class: "chip mono" }, holeName(x), x.std && h("span", { class: "muted" }, ` ${x.std}?`))))),
-      j.mesh?.scale_estimated && h("div", { class: "banner info" }, icon("ruler"), h("div", {}, "Escala estimada. Mide la dimensión más larga con un calibre e indícala para ajustar el tamaño real. ",
+      j.mesh?.scale_source === "marcadores" && h("p", { class: "muted small", style: "margin:0" }, icon("ruler"),
+        ` Escala real medida con la hoja de marcadores (${j.mesh.sheet?.markers ?? "?"} marcadores, error ${fmt(j.mesh.sheet?.rms_mm ?? 0)} mm).`),
+      j.mesh?.scale_estimated && h("div", { class: "banner info" }, icon("ruler"), h("div", {}, "Escala estimada: no vi la hoja de marcadores en el modelo. Pon la pieza sobre la hoja al grabar, o mide la dimensión más larga con un calibre e indícala. ",
         h("button", { class: "btn", style: "margin-top:8px", onclick: openAdjust }, "Indicar medida"))),
       j.mesh && !j.mesh.watertight && h("div", { class: "banner" }, icon("alert"), "La malla tiene pequeños huecos. Orca suele repararlos al importar."),
       h("div", { class: "actionbar" }, h("button", { class: "btn", onclick: openAdjust }, icon("edit"), "Ajustar medidas"), primary)].filter(Boolean));
