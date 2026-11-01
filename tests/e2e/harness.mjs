@@ -20,7 +20,7 @@ export async function start() {
   const dir = mkdtempSync(join(tmpdir(), "s2p-e2e-"));
   const port = await freePort(), base = `http://127.0.0.1:${port}`;
   const env = { ...process.env, SCAN2PRINT_AUTH: "off", SCAN2PRINT_STORAGE: join(dir, "jobs"), SCAN2PRINT_OUT: join(dir, "out"),
-    SCAN2PRINT_PORT: String(port), PYTHONPATH: `${join(ROOT, "server")}:${join(ROOT, "server/tests")}` };
+    SCAN2PRINT_PORT: String(port), SCAN2PRINT_MAX_PHOTO_MB: "2", PYTHONPATH: `${join(ROOT, "server")}:${join(ROOT, "server/tests")}` };
   const server = spawn(PYTHON, ["-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", String(port)],
     { cwd: join(ROOT, "server"), env, stdio: ["ignore", process.env.E2E_VERBOSE ? "inherit" : "ignore", "inherit"] });
   for (let i = 0; ; i++) {

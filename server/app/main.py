@@ -221,6 +221,7 @@ async def create_job(
     views: str = Form(""),
     review: str = Form(""),
     name: str = Form(""),
+    client_id: str = Form(""),
 ):
     """Sube fotos. En modo 'views', `views` es una lista separada por comas
     (planta,alzado,perfil) en el mismo orden que los ficheros."""
@@ -231,11 +232,22 @@ async def create_job(
         if len(labels) != len(files) or not set(labels) <= VIEW_NAMES:
             raise HTTPException(400, "indica una vista (planta/alzado/perfil) por fichero")
 
+    # `client_id` (32 hex, lo genera el móvil) hace idempotente la subida: si el Mac ya la recibió y se perdió la
+    # respuesta, el reintento devuelve el mismo trabajo en vez de crear un duplicado.
+    if client_id and not re.fullmatch(r"[0-9a-f]{32}", client_id):
+        raise HTTPException(400, "client_id inválido")
+    if client_id and (STORAGE / client_id / "job.json").exists():
+        return JSONResponse(_read_job(STORAGE / client_id), status_code=200)
     storage.check_count(len(files))
     storage.make_room(STORAGE, int(request.headers.get("content-length") or 0))
-    job_id = uuid.uuid4().hex
+    job_id = client_id or uuid.uuid4().hex
     d = STORAGE / job_id / "input"
-    d.mkdir(parents=True)
+    try:
+        d.mkdir(parents=True)
+    except FileExistsError:
+        if (STORAGE / job_id / "job.json").exists():      # otra petición idéntica terminó mientras tanto
+            return JSONResponse(_read_job(STORAGE / job_id), status_code=200)
+        raise HTTPException(409, "Esta subida ya está en curso; reintenta en unos segundos") from None
     saved = []
     try:
         for i, f in enumerate(files):

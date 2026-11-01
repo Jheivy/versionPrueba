@@ -58,6 +58,8 @@ Android (PWA, Chrome)  ──HTTPS LAN──▶  Mac mini: FastAPI (un solo proc
   un único acento naranja (el color del filamento; también marca cotas, foco y progreso), colores de eje rojo/verde/azul
   para X/Y/Z, IBM Plex Sans y Mono (cifras), claro y oscuro, objetivos táctiles ≥ 44 px, `prefers-reduced-motion`.
   Los tokens están en `web/css/tokens.css`; los componentes (`.btn`, `.chip`, `.note`, `.spec`, `.mfield`, `.seg`) en `components.css`.
+- **Bandeja de salida:** las capturas se guardan en el móvil (IndexedDB) antes de subirse y se reintentan solas; el `client_id`
+  del envío es el id del trabajo, así que un reintento no duplica (`outbox.js`, `create_job`).
 - **Gestos y respuesta:** deslizar para borrar, hoja inferior arrastrable, tirar para actualizar, hápticos configurables.
 
 ## Seguridad y límites
@@ -82,5 +84,6 @@ retención de 30 días desde el último uso. Detalle y variables de entorno en e
 - Agujeros circulares y ranuras (los avellanados y chaflanes no se ven en una silueta); la hoja A4 limita la pieza a ~190 × 277 mm.
 - La escala automática del vídeo depende de que Object Capture conserve el papel y de que los marcadores se lean en la
   textura; está probada con mallas sintéticas, no con una reconstrucción real.
+- Subidas: los reintentos solo ocurren con la app abierta (falta *Background Sync*) y no se reanudan por trozos.
 - Ideas: mesa giratoria, ajuste de primitivas sobre la malla, exportar 3MF,
   reparar pieza rota reflejando la mitad sana.

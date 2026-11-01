@@ -1,5 +1,6 @@
 import { h, haptic, icon, pickFile, toast } from "./ui.js";
-import { authFetch, pref, setPref, upload } from "./api.js";
+import { authFetch, pref, setPref } from "./api.js";
+import { submit } from "./outbox.js";
 import { prepareImage } from "./image.js";
 import { navigate } from "./router.js";
 
@@ -40,6 +41,12 @@ function startDetect(video, onResult) {
   };
   loop();
   return () => { stop = true; clearTimeout(t); };
+}
+
+/** Tras enviar: al trabajo creado, o a la lista si no hubo red y la captura quedó guardada en el móvil. */
+function done(res) {
+  if (res.queued) { toast("Sin conexión con el Mac: guardado en el móvil, se enviará solo"); navigate("/trabajos"); }
+  else navigate(`/trabajos/${res.job.id}`);
 }
 
 const closeBtn = () => h("a", { class: "icon-btn", href: "#/capturar", "aria-label": "Cerrar cámara" }, icon("close"));
@@ -133,12 +140,12 @@ export function camaraVistas(root) {
     async function doSend() {
       if (sending) return;
       sending = true; send.disabled = true; progress.hidden = false;
-      const fd = new FormData(), labels = [];
-      for (const [k] of VIEWS) if (shots[k]) { fd.append("files", shots[k], `${k}.jpg`); labels.push(k); }
-      fd.append("mode", "views"); fd.append("views", labels.join(",")); fd.append("review", review ? "1" : "0"); fd.append("name", name.value);
+      const files = [], labels = [];
+      for (const [k] of VIEWS) if (shots[k]) { files.push(["files", shots[k], `${k}.jpg`]); labels.push(k); }
+      const fields = [["mode", "views"], ["views", labels.join(",")], ["review", review ? "1" : "0"], ["name", name.value]];
       try {
-        const job = await upload("/jobs", fd, (p) => { bar.style.width = `${Math.round(p * 100)}%`; });
-        cleanup(); navigate(`/trabajos/${job.id}`);
+        const res = await submit({ fields, files, name: name.value }, (p) => { bar.style.width = `${Math.round(p * 100)}%`; });
+        cleanup(); done(res);
       } catch (e) {
         sending = false; send.disabled = false; progress.hidden = true;
         toast(e.message, { kind: "err", action: "Reintentar", onAction: doSend });
@@ -227,10 +234,10 @@ export function camaraVideo(root) {
     async function doSend() {
       send.disabled = true; progress.hidden = false;
       const ext = (blob.type || "").includes("mp4") ? "mp4" : (blob.name || "").split(".").pop() || "webm";
-      const fd = new FormData(); fd.append("mode", "video"); fd.append("name", name.value); fd.append("files", blob, `video.${ext}`);
+      const fields = [["mode", "video"], ["name", name.value]], files = [["files", blob, `video.${ext}`]];
       try {
-        const job = await upload("/jobs", fd, (p) => { bar.style.width = `${Math.round(p * 100)}%`; });
-        cleanup(); navigate(`/trabajos/${job.id}`);
+        const res = await submit({ fields, files, name: name.value }, (p) => { bar.style.width = `${Math.round(p * 100)}%`; });
+        cleanup(); done(res);
       } catch (e) { send.disabled = false; progress.hidden = true; toast(e.message, { kind: "err", action: "Reintentar", onAction: doSend }); }
     }
     cam.replaceChildren(h("div", { class: "sum" },

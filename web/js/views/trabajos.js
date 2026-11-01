@@ -1,4 +1,5 @@
 import { api, del } from "../api.js";
+import { list as outboxList, load as outboxLoad, remove as outboxRemove, retry as outboxRetry } from "../outbox.js";
 import { confirmSheet, fmt, h, haptic, icon, jobName, modeLabel, pullToRefresh, relTime, statusChip, swipeToDelete, toast } from "../ui.js";
 
 const FILTERS = [["all", "Todos"], ["run", "En curso"], ["done", "Listos"], ["error", "Error"]];
@@ -12,9 +13,10 @@ const skeletonRow = () => h("div", { class: "card job" },
 export function trabajos(root) {
   let jobs = null, filter = "all", timer = 0, gone = false, sig = "", animated = false;
   const list = h("div", { class: "stack" });
+  const pending = h("div", { class: "stack pending", "aria-label": "Pendientes de enviar" });
   const seg = h("div", { class: "seg", role: "group", "aria-label": "Filtro", style: `--n:${FILTERS.length}` });
   const ptr = h("div", { class: "ptr", "aria-hidden": "true" }, icon("reset"));
-  root.append(ptr, h("h1", {}, "Trabajos"), seg, list);
+  root.append(ptr, h("h1", {}, "Trabajos"), pending, seg, list);
   const stopPtr = pullToRefresh(ptr, () => refresh());
 
   const remove = async (j, reset) => {
@@ -43,6 +45,32 @@ export function trabajos(root) {
     swipeToDelete(wrap, card, (reset) => remove(j, reset));
     return wrap;
   };
+
+  /** Capturas guardadas en el móvil que aún no han llegado al Mac (sin red, subiendo o rechazadas). */
+  const MB = (n) => `${Math.max(n / 1e6, 0.1).toFixed(1).replace(".", ",")} MB`;
+  const pendingRow = (e) => {
+    const state = e.state === "failed" ? ["No se envió", "err"] : e.state === "sending"
+      ? [e.progress != null ? `Enviando ${Math.round(e.progress * 100)} %` : "Enviando", "run"] : ["Esperando conexión", "warn"];
+    return h("div", { class: "card job queued" },
+      h("span", { class: "thumb" }, icon(e.fields.some(([k, v]) => k === "mode" && v === "video") ? "film" : "camera")),
+      h("div", { style: "min-width:0" },
+        h("div", { class: "name" }, e.name || "Captura sin nombre"),
+        h("div", { class: "meta muted small" }, h("span", {}, MB(e.size)), h("span", { "aria-hidden": "true" }, "·"), h("span", {}, relTime(new Date(e.created).toISOString()))),
+        h("div", { class: "meta" }, h("span", { class: "chip " + state[1] }, state[0]), e.state === "failed" && h("span", { class: "small muted" }, e.error))),
+      h("div", { class: "qactions" },
+        e.state !== "sending" && h("button", { class: "icon-btn", "aria-label": `Reintentar el envío de ${e.name || "la captura"}`, onclick: () => { haptic("tap"); outboxRetry(e.id); } }, icon("reset")),
+        h("button", { class: "icon-btn", style: "color:var(--muted)", "aria-label": `Descartar ${e.name || "la captura"}`, onclick: async () => {
+          if (await confirmSheet("¿Descartar esta captura? No se ha enviado al Mac y se perderá.", "Descartar", true)) { haptic("success"); outboxRemove(e.id); }
+        } }, icon("trash"))));
+  };
+  const drawPending = (items = outboxList()) => {
+    const sig2 = JSON.stringify(items.map((e) => [e.id, e.state, e.progress && Math.round(e.progress * 20)]));
+    if (sig2 === drawPending.sig) return;
+    drawPending.sig = sig2;
+    pending.replaceChildren(...(items.length ? [h("div", { class: "group-title" }, `Pendientes de enviar · ${items.length}`), ...items.map(pendingRow)] : []));
+  };
+  const onOutbox = (ev) => { drawPending(ev.detail.items); if (ev.detail.count === 0) refresh(); };
+  addEventListener("s2p:outbox", onOutbox);
 
   const drawFilter = () => {
     seg.style.setProperty("--i", FILTERS.findIndex(([k]) => k === filter));
@@ -73,6 +101,8 @@ export function trabajos(root) {
     if (jobs.some((j) => group(j.status) === "run" && j.status !== "review")) timer = setTimeout(refresh, 3000);
   }
   draw();
+  drawPending();
+  outboxLoad();
   refresh();
-  return () => { gone = true; clearTimeout(timer); stopPtr(); };
+  return () => { gone = true; clearTimeout(timer); stopPtr(); removeEventListener("s2p:outbox", onOutbox); };
 }

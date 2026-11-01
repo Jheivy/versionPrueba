@@ -6,6 +6,18 @@ let h;
 before(async () => { h = await start(); });
 after(async () => { await h?.stop(); });
 
+/** Desbordes, objetivos táctiles < 44 px y botones sin nombre de la pantalla abierta. */
+const audit = (page) => page.evaluate(() => ({
+  hscroll: document.documentElement.scrollWidth > innerWidth + 1,
+  small: [...document.querySelectorAll("a,button,input:not([type=checkbox]),select")].filter((e) => {
+    const b = e.getBoundingClientRect(), cs = getComputedStyle(e);
+    return b.width > 0 && b.height > 0 && cs.visibility !== "hidden" && (b.height < 44 || b.width < 44)
+      && !e.closest(".chips") && !e.closest(".seg") && !e.closest(".cam");
+  }).map((e) => `${(e.getAttribute("aria-label") || e.textContent || e.tagName).trim().slice(0, 24)} ${Math.round(e.getBoundingClientRect().width)}x${Math.round(e.getBoundingClientRect().height)}`),
+  unnamed: [...document.querySelectorAll("button,a")].filter((e) => !(e.textContent.trim() || e.getAttribute("aria-label") || e.querySelector("img[alt]"))).length,
+}));
+const clean = (r) => !(r.hscroll || r.small.length || r.unnamed);
+
 const go = (page, hash, selector) => page.goto(`${h.base}/#/${hash}`).then(() => page.waitForSelector(selector, { timeout: 20000 }));
 
 describe("recorrido en el móvil", () => {
@@ -108,19 +120,77 @@ describe("auditoría de interfaz (2 anchos × 2 temas)", () => {
       for (const [name, hash, sel] of routes(h.ids)) {
         await go(page, hash, sel);
         await page.waitForTimeout(600);
-        const r = await page.evaluate(() => ({
-          hscroll: document.documentElement.scrollWidth > innerWidth + 1,
-          small: [...document.querySelectorAll("a,button,input:not([type=checkbox]),select")].filter((e) => {
-            const b = e.getBoundingClientRect(), cs = getComputedStyle(e);
-            return b.width > 0 && b.height > 0 && cs.visibility !== "hidden" && (b.height < 44 || b.width < 44)
-              && !e.closest(".chips") && !e.closest(".seg") && !e.closest(".cam");
-          }).map((e) => `${(e.getAttribute("aria-label") || e.textContent || e.tagName).trim().slice(0, 24)} ${Math.round(e.getBoundingClientRect().width)}x${Math.round(e.getBoundingClientRect().height)}`),
-          unnamed: [...document.querySelectorAll("button,a")].filter((e) => !(e.textContent.trim() || e.getAttribute("aria-label") || e.querySelector("img[alt]"))).length,
-        }));
-        if (r.hscroll || r.small.length || r.unnamed) problems.push({ name, ...r });
+        const r = await audit(page);
+        if (!clean(r)) problems.push({ name, ...r });
       }
       assert.deepEqual(problems, []);
       await close();
     });
   }
+});
+
+
+describe("bandeja de salida (sin red no se pierde nada)", () => {
+  const jobsCount = async () => (await (await fetch(`${h.base}/api/jobs`)).json()).length;
+  // Sube una captura mínima desde la propia página, con el módulo real de la app
+  const submitFromPage = (page, { name, file = "v.mp4", bytes = 4000 }) => page.evaluate(async ({ name, file, bytes }) => {
+    const { submit } = await import("/js/outbox.js");
+    const blob = new Blob([new Uint8Array(bytes)], { type: file.endsWith("jpg") ? "image/jpeg" : "video/mp4" });
+    try { return await submit({ fields: [["mode", "video"], ["name", name]], files: [["files", blob, file]], name }); }
+    catch (e) { return { error: e.message, status: e.status, network: !!e.network }; }
+  }, { name, file, bytes });
+
+  test("sin red queda guardada, sobrevive a recargar, y se envía sola al volver la red", async () => {
+    const { page, errors, close } = await h.page();
+    await go(page, "trabajos", ".job");
+    const before = await jobsCount();
+    await page.route("**/api/jobs", (route) => (route.request().method() === "POST" ? route.abort() : route.continue()));
+    const res = await submitFromPage(page, { name: "Captura sin red" });
+    assert.equal(res.queued, true);
+    await page.waitForSelector(".pending .job.queued");
+    assert.match(await page.locator(".pending").innerText(), /Captura sin red/);
+    assert.match(await page.locator(".pending").innerText(), /Esperando conexión/i);
+    assert.equal(await page.locator('.tabbar a[data-tab="trabajos"]').getAttribute("data-pending"), "1");
+    assert.ok(clean(await audit(page)), "la tarjeta pendiente cumple la auditoría táctil");
+
+    await page.reload();                                            // cerrar y volver a abrir la app
+    await page.waitForSelector(".pending .job.queued");
+    assert.equal(await jobsCount(), before);
+
+    await page.unroute("**/api/jobs");                              // vuelve la red
+    await page.getByRole("button", { name: /Reintentar el envío/ }).click();
+    await page.waitForFunction(() => !document.querySelector(".pending .job.queued"), null, { timeout: 15000 });
+    assert.equal(await jobsCount(), before + 1);
+    assert.equal(await page.locator('.tabbar a[data-tab="trabajos"]').getAttribute("data-pending"), null);
+    assert.deepEqual(errors.filter((e) => !/ERR_FAILED|Failed to load resource/.test(e)), []);
+    await close();
+  });
+
+  test("si el Mac recibió la subida pero se perdió la respuesta, el reintento no duplica el trabajo", async () => {
+    const { page, close } = await h.page();
+    await go(page, "trabajos", ".job");
+    const before = await jobsCount();
+    await page.route("**/api/jobs", async (route) => {
+      if (route.request().method() !== "POST") return route.continue();
+      await route.fetch();                                          // el servidor lo procesa…
+      return route.abort();                                         // …pero el móvil no recibe la respuesta
+    });
+    assert.equal((await submitFromPage(page, { name: "Respuesta perdida" })).queued, true);
+    assert.equal(await jobsCount(), before + 1, "el Mac sí creó el trabajo");
+    await page.unroute("**/api/jobs");
+    await page.getByRole("button", { name: /Reintentar el envío/ }).click();
+    await page.waitForFunction(() => !document.querySelector(".pending .job.queued"), null, { timeout: 15000 });
+    assert.equal(await jobsCount(), before + 1, "sin duplicado");
+    await close();
+  });
+
+  test("un rechazo del Mac (límite de tamaño) no se encola: se avisa al momento", async () => {
+    const { page, close } = await h.page();
+    await go(page, "trabajos", ".job");
+    const res = await submitFromPage(page, { name: "Demasiado grande", file: "grande.jpg", bytes: 3 * 1024 * 1024 });
+    assert.equal(res.status, 413);
+    assert.match(res.error, /límite/);
+    assert.equal(await page.evaluate(async () => (await import("/js/outbox.js")).list().length), 0);
+    await close();
+  });
 });
