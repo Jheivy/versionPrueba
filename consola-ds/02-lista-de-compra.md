@@ -1,5 +1,7 @@
 # Lista de compra — Consola DS DIY (×2)
 
+> **ACTUALIZACIÓN (sin prototipo aparte):** se eliminan la fuente de 27 W y el cable micro‑HDMI (se prueba con las pantallas finales y un cargador USB‑C que ya tengáis), el stick opcional y el segundo kilo de filamento; las pantallas pasan a Elecrow o anuncios más baratos. La Pi, el disipador y la microSD no se tocan porque van dentro de las consolas finales. Total de la lista: unos 350–500 € las dos consolas (~175–250 € cada una). La versión al día está en el artifact de la lista de compra.
+>
 > Precios orientativos de noviembre de 2026, **por consola** salvo que se indique. Compruébalos antes de comprar.
 > Los enlaces de AliExpress son búsquedas, porque sus anuncios cambian a menudo. Antes de comprar, mirad las valoraciones y que el anuncio diga **"Raspberry Pi 5"**.
 
