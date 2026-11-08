@@ -18,7 +18,9 @@ Queréis construir **2 consolas** tipo Nintendo DS (carcasa impresa en Bambu A1 
 |---|---|---|
 | **Cerca (sin router)** | Consola A crea un punto de acceso Wi‑Fi propio; B se conecta sola (credenciales pre‑guardadas) | Viajes, sofá, sin internet |
 | **Misma casa** | Ambas al Wi‑Fi de casa | Menos latencia que el hotspot |
-| **Lejos** | VPN tipo Tailscale/ZeroTier → melonDS cree que estáis en la misma LAN | Jugar a distancia |
+| **Lejos** | ⚠️ melonDS **no** soporta LAN por VPN/internet. A distancia solo otras consolas (p. ej. GBA con netplay de RetroArch) | Jugar a distancia |
+
+> ⚠️ melonDS recomienda cable para el multijugador LAN y avisa de que por Wi‑Fi puede ir mal. Se valida en la fase 1 (ver `02-lista-de-compra.md`). Plan B: "cable link" Ethernet entre las dos consolas.
 
 **Emparejamiento "un botón":** menú "Jugar juntos" → una consola pulsa *Crear sala*, la otra *Unirse* → se lanza el mismo juego en ambas. Como las dos consolas son "gemelas", se configuran emparejadas de fábrica (la vuestra con la suya).
 - "Por frecuencia" (radio tipo 2,4 GHz propio/ESP‑NOW): **no lo recomiendo**; melonDS habla por red IP, así que Wi‑Fi directo/hotspot cumple el mismo objetivo sin hardware extra.
@@ -75,6 +77,8 @@ Software: Raspberry Pi OS Lite → menú propio (Python/Godot) → melonDS
 ```
 
 ## 6. Coste por consola — versión ECONÓMICA (aprox., verificar precios)
+
+> ⚠️ Desactualizado: la Pi 5 ha subido a ~70–85 €. Precios actuales y enlaces en `02-lista-de-compra.md`.
 | Parte | Elección barata | € |
 |---|---|---|
 | Cerebro | **Pi 5 de 2 GB** (melonDS no necesita más RAM) + disipador/ventilador genérico | 55–65 |
