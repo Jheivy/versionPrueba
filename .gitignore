@@ -5,3 +5,4 @@ storage/
 *.pem
 .DS_Store
 node_modules/
+copia/
